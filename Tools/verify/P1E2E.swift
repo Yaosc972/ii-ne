@@ -446,21 +446,26 @@ final class Harness {
             view.mouseDown(with: down)
             pump(0.25)
         }
+        // 按下不预填选区：用户要的是「从这一点开始划」。框是松手时才出现的。
+        if view.selectionRect.isEmpty {
+            pass("SNAP-PRESS", "按下时选区为空，不会先替你框好一整块")
+        } else {
+            fail("SNAP-PRESS", "按下就出现选区 \(view.selectionRect)，会挡住自由拖拽")
+        }
+        if let up = mouseEvent(.leftMouseUp, at: viewPoint, in: window) {
+            view.mouseUp(with: up)
+            pump(0.15)
+        }
         let snapped = view.selectionRect
         if abs(snapped.minX - expectedViewRect.minX) <= 1,
            abs(snapped.minY - expectedViewRect.minY) <= 1,
            abs(snapped.width - expectedViewRect.width) <= 1,
            abs(snapped.height - expectedViewRect.height) <= 1 {
-            pass("SNAP", "点击窗口后吸附 selectionRect=\(snapped) 与窗口 \(target.ownerName) \(target.bounds) 一致")
+            pass("SNAP", "单击窗口后吸附 selectionRect=\(snapped) 与窗口 \(target.ownerName) \(target.bounds) 一致")
         } else {
             fail("SNAP", "吸附 selectionRect=\(snapped) 期望 \(expectedViewRect)（\(target.ownerName)）")
         }
         _ = capture("05-window-snap-label.png")
-
-        if let up = mouseEvent(.leftMouseUp, at: viewPoint, in: window) {
-            view.mouseUp(with: up)
-            pump(0.15)
-        }
         let imageRect = RectMath.imageRect(
             fromViewRect: snapped, viewHeight: view.bounds.height, scale: view.shot.scale
         )

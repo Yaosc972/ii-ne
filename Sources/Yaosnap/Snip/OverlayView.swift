@@ -61,6 +61,12 @@ final class OverlayView: NSView {
     private var scrollingMessage: String?
     private var toolMode: ToolMode = .draw(.rect)
     /// 光标下的可吸附窗口（全局坐标）。nil 表示光标不在任何窗口上。
+    /// 按下时记下的吸附目标。只有「按下没拖动就松手」才用它，
+    /// 一旦真的拖起来就是自由选区，避免一按下就先框好一整块。
+    private var pendingSnapRect: CGRect?
+    /// 元素级 AX 探测的节流时间戳与间隔（秒）。
+    private var lastElementProbe: TimeInterval = 0
+    private static let elementProbeInterval: TimeInterval = 0.08
     private var hoverWindow: WindowCandidate?
     /// 光标下 UI 元素的吸附矩形（视图坐标）。nil 表示本帧没有可用的元素候选。
     private var hoverElementRect: CGRect?
@@ -409,7 +415,17 @@ final class OverlayView: NSView {
         // 有按压或已有选区时不画 hover，跳过状态更新避免整屏重绘
         guard case .idle = phase, selectionRect.isEmpty else { return }
         let hit = windowUnderMouse(at: point)
-        let element = elementUnderMouse(at: point)
+        // 窗口级命中用 CGWindowList，便宜；元素级要走跨进程 AX，跟着每次移动查会卡。
+        let now = ProcessInfo.processInfo.systemUptime
+        let element: CGRect?
+        if now - lastElementProbe >= Self.elementProbeInterval {
+            lastElementProbe = now
+            element = elementUnderMouse(at: point)
+        } else if hit == hoverWindow {
+            element = hoverElementRect
+        } else {
+            element = nil
+        }
         guard hit != hoverWindow || element != hoverElementRect else { return }
         hoverWindow = hit
         hoverElementRect = element
@@ -700,8 +716,19 @@ final class OverlayView: NSView {
         defer { refreshMagnifier() }
         switch phase {
         case .selecting:
-            guard selectionRect.width >= Self.minimumSelectionSide,
-                  selectionRect.height >= Self.minimumSelectionSide else {
+            let dragged = selectionRect.width >= Self.minimumSelectionSide
+                && selectionRect.height >= Self.minimumSelectionSide
+            // 单击（没拖动）时把按下的吸附目标选上，等于「点哪个窗口选哪个」。
+            if !dragged, let snap = pendingSnapRect,
+               snap.width >= Self.minimumSelectionSide,
+               snap.height >= Self.minimumSelectionSide {
+                selectionRect = snap
+                pendingSnapRect = nil
+                commitSelection()
+                return
+            }
+            pendingSnapRect = nil
+            guard dragged else {
                 selectionRect = .zero
                 phase = .idle
                 updateActionBar()
@@ -1672,28 +1699,33 @@ final class OverlayView: NSView {
         phase = .resizingShape(id: hit.id, corner: hit.corner, original: shape, recorded: false)
     }
 
-    /// 开始一次选区拖拽。元素优先于窗口：起点落在可用元素内 → 选区为该元素；
-    /// 否则落在窗口内 → 整个窗口。拖动超过阈值才脱离锁定。
+    /// 开始一次选区拖拽。
+    ///
+    /// 按下时**不预填选区**：用户要的是「从这一点开始划」。吸附目标只记在
+    /// pendingSnapRect 里，按下没拖动就松手（单击）才用它把整个窗口/元素选上。
+    /// 之前的写法一按下就把整块窗口填进选区，鼠标一动就跳变，像是替你框好了。
     private func beginSelection(at point: CGPoint) {
+        pendingSnapRect = elementUnderMouse(at: point) ?? windowRectUnderMouse(at: point)
         hoverWindow = nil
         hoverElementRect = nil
-        if let element = elementUnderMouse(at: point) {
-            selectionRect = element
-        } else if let window = windowUnderMouse(at: point) {
-            selectionRect = RectMath.clamp(
-                RectMath.toViewRect(
-                    globalRect: window.bounds,
-                    displayBounds: shot.bounds,
-                    viewHeight: bounds.height
-                ),
-                to: bounds
-            )
-        } else {
-            selectionRect = .zero
-        }
+        selectionRect = .zero
         phase = .selecting(origin: point, freeDrag: false)
         updateActionBar()
         needsDisplay = true
+    }
+
+    /// 光标下窗口在本屏视图坐标系下的矩形。
+    private func windowRectUnderMouse(at point: CGPoint) -> CGRect? {
+        guard let window = windowUnderMouse(at: point) else { return nil }
+        let rect = RectMath.clamp(
+            RectMath.toViewRect(
+                globalRect: window.bounds,
+                displayBounds: shot.bounds,
+                viewHeight: bounds.height
+            ),
+            to: bounds
+        )
+        return rect.isEmpty ? nil : rect
     }
 
     /// 选区确定：边界取整保证预览与导出位图尺寸一致，然后进入 ready。
@@ -2288,12 +2320,16 @@ final class OverlayView: NSView {
 
     // MARK: - 绘制
 
+    /// 悬停只是「点一下会选中这块」的预览：虚线细边，不能画得像已经选好的选区。
     private func drawHoverHighlight() {
         guard let rect = hoverRectInView() else { return }
-        let border = NSBezierPath(rect: rect)
-        border.lineWidth = 2
+        let border = NSBezierPath(rect: rect.insetBy(dx: 1, dy: 1))
+        border.lineWidth = 1
+        border.setLineDash([4, 3], count: 2, phase: 0)
         // 元素比窗口更细，用不同颜色区分当前吸附的是哪一级。
-        (hoverElementRect == nil ? NSColor.systemBlue : NSColor.systemOrange).setStroke()
+        (hoverElementRect == nil ? NSColor.systemBlue : NSColor.systemOrange)
+            .withAlphaComponent(0.85)
+            .setStroke()
         border.stroke()
     }
 
