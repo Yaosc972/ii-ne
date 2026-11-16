@@ -104,6 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { ToolbarGlyph.preload() }
     }
 
+    /// 菜单栏图标可能被系统折叠进「更多」，或者干脆没在可见区域。
+    /// 再次打开应用（Finder / Spotlight / open -a）时把菜单弹出来，保证永远进得去。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        statusItemController?.revealMenu()
+        return false
+    }
+
     private func showSettings() {
         if settingsWindowController == nil {
             let controller = SettingsWindowController(

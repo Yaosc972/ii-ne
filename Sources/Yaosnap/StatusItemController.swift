@@ -105,6 +105,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
+    /// 菜单被隐藏或挤到「更多」里时，用户从 Finder 再打开一次应用就是唯一入口。
+    /// 直接在我们这块菜单栏位置弹出菜单，等于替用户点了一下图标。
+    func revealMenu() {
+        rebuildMenu()
+        guard let button = statusItem.button else { return }
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: 0, y: button.bounds.height + 4),
+            in: button
+        )
+    }
+
     /// 分组与 Solo 状态随贴图变化，每次展开菜单时重建。
     func menuNeedsUpdate(_ menu: NSMenu) {
         rebuildMenu()

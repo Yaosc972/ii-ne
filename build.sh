@@ -25,6 +25,21 @@ else
     echo "提示：当前为 ad-hoc 签名，改代码重建后辅助功能授权可能失效。运行一次 Tools/setup-signing.sh 可固定签名。"
 fi
 echo "Built $APP"
+
+# 装到 /Applications 并重启：菜单栏应用没有 Dock 图标，装在构建目录里重启后就再也找不到。
+if [ "${1:-}" = "install" ] || [ "${1:-}" = "installed" ]; then
+    DEST="/Applications/Yaosnap.app"
+    osascript -e 'quit app "Yaosnap"' >/dev/null 2>&1 || true
+    pkill -f "Yaosnap.app/Contents/MacOS/Yaosnap" >/dev/null 2>&1 || true
+    sleep 1
+    rm -rf "$DEST"
+    ditto "$APP" "$DEST"
+    xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST"
+    open -a "$DEST"
+    echo "Installed $DEST"
+fi
+
 CLI="$SCRIPT_DIR/.build/release/snip"
 echo "Built CLI $CLI"
 echo "加入 PATH（写入你的 shell 配置）：export PATH=\"$SCRIPT_DIR/.build/release:\$PATH\""
