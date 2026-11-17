@@ -4,7 +4,7 @@ import CoreImage
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-import YaosnapCore
+import IineCore
 
 /// 固定周期的黑白竖条纹，给放大镜用例提供可控的高频底图。
 /// 周期 16pt（8pt 黑 + 8pt 白），放大 2 倍后交界间距应从 8pt 变成 16pt。
@@ -28,7 +28,7 @@ private final class StripePatternView: NSView {
 final class AnnotateObserverWiring {
     let controller = SnipController(historyStore: CaptureHistoryStore(
         directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaosnap-p2-history-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("iine-p2-history-\(UUID().uuidString)", isDirectory: true)
     ))
 
     init() {
@@ -64,6 +64,14 @@ final class AnnotateHarness {
     }
 
     // MARK: - 基础设施
+
+    private func firstTextView(in view: NSView) -> NSTextView? {
+        if let editor = view as? NSTextView { return editor }
+        for child in view.subviews {
+            if let editor = firstTextView(in: child) { return editor }
+        }
+        return nil
+    }
 
     private func pass(_ id: String, _ detail: String) {
         passes += 1
@@ -271,6 +279,14 @@ final class AnnotateHarness {
         }
         button.performClick(nil)
         pump(0.1)
+        guard let choices = bar.choicePopover?.contentViewController?.view as? ToolbarChoiceView,
+              !choices.buttons.isEmpty else {
+            fail(id, "没有显示样式选项")
+            return false
+        }
+        let selected = choices.items.firstIndex(where: { $0.selected }) ?? 0
+        choices.buttons[(selected + 1) % choices.buttons.count].performClick(nil)
+        pump(0.1)
         return true
     }
 
@@ -284,6 +300,14 @@ final class AnnotateHarness {
         }
         button.performClick(nil)
         pump(0.1)
+        guard let choices = bar.choicePopover?.contentViewController?.view as? ToolbarChoiceView,
+              !choices.buttons.isEmpty else {
+            fail(id, "没有显示样式选项")
+            return false
+        }
+        let selected = choices.items.firstIndex(where: { $0.selected }) ?? 0
+        choices.buttons[(selected + 1) % choices.buttons.count].performClick(nil)
+        pump(0.1)
         return true
     }
 
@@ -296,6 +320,14 @@ final class AnnotateHarness {
             return false
         }
         button.performClick(nil)
+        pump(0.1)
+        guard let choices = bar.choicePopover?.contentViewController?.view as? ToolbarChoiceView,
+              !choices.buttons.isEmpty else {
+            fail(id, "没有显示样式选项")
+            return false
+        }
+        let selected = choices.items.firstIndex(where: { $0.selected }) ?? 0
+        choices.buttons[(selected + 1) % choices.buttons.count].performClick(nil)
         pump(0.1)
         return true
     }
@@ -1042,7 +1074,7 @@ final class AnnotateHarness {
         }
         let click = CGPoint(x: selection.minX + 60, y: selection.minY + 220)
         press(view, window: window, path: [click])
-        guard let editor = view.subviews.compactMap({ $0 as? NSTextView }).first else {
+        guard let editor = firstTextView(in: view) else {
             fail("TEXT-COMMIT", "单击后没有出现文字编辑器")
             endSession()
             return
@@ -1061,7 +1093,7 @@ final class AnnotateHarness {
             return
         }
         press(view, window: window, path: [click])
-        guard let reopened = view.subviews.compactMap({ $0 as? NSTextView }).first else {
+        guard let reopened = firstTextView(in: view) else {
             fail("TEXT-COMMIT", "取消后无法重新进入编辑")
             endSession()
             return
@@ -1123,7 +1155,7 @@ final class AnnotateHarness {
         }
         let click = CGPoint(x: selection.minX + 60, y: selection.minY + 280)
         press(view, window: window, path: [click])
-        guard let editor = view.subviews.compactMap({ $0 as? NSTextView }).first else {
+        guard let editor = firstTextView(in: view) else {
             fail("TEXT-MULTILINE", "单击后没有出现文字编辑器")
             endSession()
             return
@@ -1169,7 +1201,7 @@ final class AnnotateHarness {
         }
         let click = CGPoint(x: selection.minX + 60, y: selection.minY + 220)
         press(view, window: window, path: [click])
-        guard let editor = view.subviews.compactMap({ $0 as? NSTextView }).first else {
+        guard let editor = firstTextView(in: view) else {
             fail("TEXT-BACKGROUND", "单击后没有出现文字编辑器")
             endSession()
             return
@@ -1235,7 +1267,7 @@ final class AnnotateHarness {
         }
         let click = CGPoint(x: selection.minX + 60, y: selection.minY + 260)
         press(view, window: window, path: [click])
-        guard let editor = view.subviews.compactMap({ $0 as? NSTextView }).first else {
+        guard let editor = firstTextView(in: view) else {
             fail("TEXT-RESIZE", "单击后没有出现文字编辑器")
             endSession()
             return
@@ -1683,7 +1715,7 @@ final class AnnotateHarness {
         press(view, window: window, path: [
             CGPoint(x: selection.minX + 60, y: selection.minY + 250),
         ])
-        guard let editor = view.subviews.compactMap({ $0 as? NSTextView }).first else {
+        guard let editor = firstTextView(in: view) else {
             fail("AUTO-SELECT-TEXT", "单击后没有出现文字编辑器")
             endSession()
             return
@@ -1908,7 +1940,8 @@ final class AnnotateHarness {
             ])
         }
         drawLine(canvasY: 200)
-        guard pickAlpha(view, 3, id: "ALPHA"),
+        guard tapTool(view, .line, id: "ALPHA-DESELECT"),
+              pickAlpha(view, 3, id: "ALPHA"),
               let bar = view.subviews.compactMap({ $0 as? AnnotateToolbar }).first else {
             endSession()
             return
@@ -2798,7 +2831,7 @@ final class AnnotateHarness {
             return
         }
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaosnap-quicksave-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("iine-quicksave-\(UUID().uuidString)", isDirectory: true)
         defer {
             controller.quickSaveDirectory = nil
             try? FileManager.default.removeItem(at: directory)
@@ -2824,7 +2857,7 @@ final class AnnotateHarness {
         guard let (window, view) = beginSession("QUICKSAVE-SHORTCUT") else { return }
         drag(view, window: window, from: CGPoint(x: 150, y: 150), to: CGPoint(x: 750, y: 600))
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaosnap-quicksave-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("iine-quicksave-\(UUID().uuidString)", isDirectory: true)
         defer {
             controller.quickSaveDirectory = nil
             try? FileManager.default.removeItem(at: directory)
@@ -2855,7 +2888,7 @@ final class AnnotateHarness {
             endSession()
             return
         }
-        guard textButton.toolTip == "提取文字", barcodeButton.toolTip == "识别码",
+        guard (textButton.toolTip ?? "").hasPrefix("提取文字"), (barcodeButton.toolTip ?? "").hasPrefix("识别码"),
               textButton.image != nil, barcodeButton.image != nil else {
             fail("RECOGNIZE-BUTTONS", "按钮标识不符：\(textButton.toolTip ?? "nil") / \(barcodeButton.toolTip ?? "nil")")
             endSession()
@@ -2863,7 +2896,7 @@ final class AnnotateHarness {
         }
         pass("RECOGNIZE-BUTTONS", "工具条含提取文字 / 识别码按钮")
 
-        let payload = "yaosnap-e2e-2026"
+        let payload = "iine-e2e-2026"
         guard let qr = Self.makeQRCode(payload) else {
             fail("RECOGNIZE-BARCODE", "生成二维码图像失败")
             endSession()
@@ -3100,7 +3133,7 @@ final class AnnotateHarness {
 
     /// 设置里选了 16:9 后，拖出的选区保持该比例，工具条标签同步。
     private func runAspectRatio() {
-        let suite = "yaosnap.p2.aspect.\(UUID().uuidString)"
+        let suite = "iine.p2.aspect.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else {
             fail("ASPECT-RATIO", "无法创建测试 UserDefaults suite")
             return
@@ -3142,7 +3175,7 @@ final class AnnotateHarness {
 
     /// 导出阴影开关前后，同一选区复制的剪贴板图像四周各多出一圈边距。
     private func runShadowExport() {
-        let suite = "yaosnap.p2.shadow.\(UUID().uuidString)"
+        let suite = "iine.p2.shadow.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else {
             fail("SHADOW-EXPORT", "无法创建测试 UserDefaults suite")
             return
@@ -3330,7 +3363,7 @@ struct P2AnnotateE2EMain {
             let app = NSApplication.shared
             app.setActivationPolicy(.accessory)
 
-            let base = URL(fileURLWithPath: "/tmp/yaosnap-verify", isDirectory: true)
+            let base = URL(fileURLWithPath: "/tmp/iine-verify", isDirectory: true)
             let evidence = base.appendingPathComponent("evidence", isDirectory: true)
             try? FileManager.default.createDirectory(at: evidence, withIntermediateDirectories: true)
 

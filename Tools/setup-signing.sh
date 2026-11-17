@@ -4,11 +4,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SIGN_ID="Yaosnap Local Signing"
-DIR=".env-tools/signing"
+SIGN_ID="ii ne Local Signing"
+DIR=".env-tools/signing-iine"
 CERT="$DIR/cert.pem"
 P12="$DIR/cert.p12"
-PASS="yaosnap"
+PASS="iine"
 
 if [ ! -f "$CERT" ]; then
     mkdir -p "$DIR"
@@ -18,7 +18,7 @@ distinguished_name = dn
 x509_extensions = v3
 prompt = no
 [ dn ]
-CN = Yaosnap Local Signing
+CN = ii ne Local Signing
 [ v3 ]
 basicConstraints = critical,CA:true
 keyUsage = critical,digitalSignature,keyCertSign

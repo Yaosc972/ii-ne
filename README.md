@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="Assets/app-icon.png" width="128" alt="Yaosnap">
+<img src="Assets/app-icon.png" width="128" alt="ii ne">
 
-# Yaosnap
+# ii ne
 
 **macOS 截图、标注与贴图工具** · A native screenshot, annotation and pin-to-screen tool for macOS
 
@@ -20,7 +20,7 @@
 
 ## 中文
 
-Yaosnap 是一个用 Swift + AppKit 写的原生 macOS 截图工具，**没有任何第三方依赖**。
+ii ne 是一个用 Swift + AppKit 写的原生 macOS 截图工具，**没有任何第三方依赖**。
 它是我按自己每天在用的工作流，对 Snipaste 2 的重新实现（不复用其代码或二进制）。
 功能按实际使用取舍，交互尽量贴近 Snipaste。
 
@@ -77,22 +77,24 @@ Yaosnap 是一个用 Swift + AppKit 写的原生 macOS 截图工具，**没有�
 没有预编译的 release，需要自行构建。只需要 Command Line Tools，**不需要完整 Xcode**：
 
 ```bash
-git clone https://github.com/Yaosc972/yaosnap.git
-cd yaosnap
+git clone https://github.com/Yaosc972/yaosnap.git ii-ne
+cd ii-ne
 ./build.sh install          # 构建并安装到 /Applications 后启动
 ```
 
-不带参数时只会产出 `Build/Yaosnap.app` 和 `snip` 命令行工具：
+不带参数时只会产出 `Build/ii ne.app` 和 `snip` 命令行工具：
 
 ```bash
 ./build.sh
-open Build/Yaosnap.app
+open "Build/ii ne.app"
 ```
 
 应用以菜单栏图标方式运行（`LSUIElement`），**没有 Dock 图标**。如果菜单栏图标被系统折叠，
-直接从 Finder / 聚焦再打开一次应用，Yaosnap 会把菜单弹出来。
+直接从 Finder / 聚焦再打开一次应用，ii ne 会把菜单弹出来。
 
-Yaosnap 使用自签名，未做公证，也不通过 App Store 分发。
+ii ne 使用自签名，未做公证，也不通过 App Store 分发。
+
+从旧版升级时，首次启动会迁移旧设置和截图历史。已有的新数据优先保留，旧目录保留作兼容。翻译密钥会在首次使用时迁移，旧版唤起链接也可继续使用。应用标识已改名，macOS 可能要求重新授予权限。
 
 ### 权限
 
@@ -100,6 +102,7 @@ Yaosnap 使用自签名，未做公证，也不通过 App Store 分发。
 | --- | --- | --- |
 | 屏幕录制 | 截取屏幕内容 | 必需 |
 | 辅助功能 | 自动识别 UI 元素 | 可选 |
+| 输入监控 | F1 等功能键的全局监听 | 使用此类快捷键时需要 |
 
 授予屏幕录制后需要**退出并重新启动**应用，TCC 只在全新启动时生效。
 
@@ -137,7 +140,7 @@ snip hide-images              # 隐藏全部贴图
 snip whiteboard --color red   # 白板模式
 ```
 
-也可以走 URL scheme：`yaosnap://snip`、`yaosnap://pin` 等。
+也可以走 URL scheme：`iine://snip`、`iine://pin` 等。
 
 ### 开发与测试
 
@@ -165,10 +168,10 @@ snip whiteboard --color red   # 白板模式
 
 | 路径 | 内容 |
 | --- | --- |
-| `Sources/YaosnapCore` | 坐标数学、截屏、窗口检测、标注模型与渲染、剪贴板、热键、设置、历史，可单测 |
-| `Sources/Yaosnap` | AppKit 外壳：菜单栏、覆盖层、贴图窗口、设置、标注工具条 |
+| `Sources/IineCore` | 坐标数学、截屏、窗口检测、标注模型与渲染、剪贴板、热键、设置、历史，可单测 |
+| `Sources/Iine` | AppKit 外壳：菜单栏、覆盖层、贴图窗口、设置、标注工具条 |
 | `Sources/snip` | `snip` 命令行解析与 URL 分发 |
-| `Tests/YaosnapCoreTests` | 单元测试 |
+| `Tests/IineCoreTests` | 单元测试 |
 | `Tools/verify` | 端到端 harness |
 | `Tools/make-app-icon.py` | 从 `Assets/logo-1024.png` 生成 AppIcon 与状态栏图标 |
 | `Assets/` | README 与图标母图 |
@@ -188,7 +191,7 @@ MIT，见 [LICENSE](LICENSE)。
 
 ## English
 
-Yaosnap is a native macOS screenshot tool written in Swift and AppKit, with **no third party
+ii ne is a native macOS screenshot tool written in Swift and AppKit, with **no third party
 dependencies**. It is a personal reimplementation of Snipaste 2 that follows the workflow I use
 every day. It does not reuse Snipaste code or binaries, features are scoped by actual use, and the
 interaction model follows Snipaste closely.
@@ -251,22 +254,24 @@ There is no prebuilt release; build it yourself. Command Line Tools are enough, 
 required**:
 
 ```bash
-git clone https://github.com/Yaosc972/yaosnap.git
-cd yaosnap
+git clone https://github.com/Yaosc972/yaosnap.git ii-ne
+cd ii-ne
 ./build.sh install          # build, install into /Applications and launch
 ```
 
-Without arguments the script only produces `Build/Yaosnap.app` and the `snip` CLI:
+Without arguments the script only produces `Build/ii ne.app` and the `snip` CLI:
 
 ```bash
 ./build.sh
-open Build/Yaosnap.app
+open "Build/ii ne.app"
 ```
 
 The app runs as a menu bar item (`LSUIElement`) with **no Dock icon**. If the menu bar item gets
-folded away by macOS, open the app once more from Finder or Spotlight and Yaosnap pops its menu.
+folded away by macOS, open the app once more from Finder or Spotlight and ii ne pops its menu.
 
-Yaosnap is self-signed, not notarized, and not distributed through the App Store.
+ii ne is self-signed, not notarized, and not distributed through the App Store.
+
+On the first launch after upgrading, ii ne imports the previous settings and screenshot history. Existing data in the new location takes priority, and the previous directories are retained. The translation credential migrates on first use, and previous app links continue to work. macOS may request permissions again for the renamed app identifier.
 
 ### Permissions
 
@@ -274,6 +279,7 @@ Yaosnap is self-signed, not notarized, and not distributed through the App Store
 | --- | --- | --- |
 | Screen Recording | capturing the screen | yes |
 | Accessibility | UI element detection | optional |
+| Input Monitoring | global listening for function keys such as F1 | required for these shortcuts |
 
 Grant Screen Recording, then **quit and relaunch** the app: TCC only applies it on a fresh launch.
 
@@ -311,7 +317,7 @@ snip hide-images              # hide all pin windows
 snip whiteboard --color red   # whiteboard mode
 ```
 
-A URL scheme is available too: `yaosnap://snip`, `yaosnap://pin` and friends.
+A URL scheme is available too: `iine://snip`, `iine://pin` and friends.
 
 ### Development and tests
 
@@ -340,10 +346,10 @@ gitignored.
 
 | Path | Contents |
 | --- | --- |
-| `Sources/YaosnapCore` | coordinate math, screen capture, window detection, annotation model and renderer, clipboard, hotkeys, settings, history — unit testable |
-| `Sources/Yaosnap` | AppKit shell: menu bar, overlay windows, pin windows, settings, annotation toolbar |
+| `Sources/IineCore` | coordinate math, screen capture, window detection, annotation model and renderer, clipboard, hotkeys, settings, history — unit testable |
+| `Sources/Iine` | AppKit shell: menu bar, overlay windows, pin windows, settings, annotation toolbar |
 | `Sources/snip` | the `snip` command line parser and URL dispatcher |
-| `Tests/YaosnapCoreTests` | unit tests |
+| `Tests/IineCoreTests` | unit tests |
 | `Tools/verify` | end to end harnesses |
 | `Tools/make-app-icon.py` | builds AppIcon and the status bar icons from `Assets/logo-1024.png` |
 | `Assets/` | logo masters and README images |

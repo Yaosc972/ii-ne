@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
-import YaosnapCore
+import IineCore
 
 /// P3 贴图第一批验收 harness。驱动真实 PinController / PinWindow，
 /// 验证单张 / 多张共存、关闭、隐藏显示、Esc 与双击。
@@ -12,6 +12,14 @@ final class PinHarness {
     private var failures = 0
 
     // MARK: - 基础设施
+
+    private func firstTextView(in view: NSView) -> NSTextView? {
+        if let editor = view as? NSTextView { return editor }
+        for child in view.subviews {
+            if let editor = firstTextView(in: child) { return editor }
+        }
+        return nil
+    }
 
     private func pass(_ id: String, _ detail: String) {
         passes += 1
@@ -342,7 +350,7 @@ final class PinHarness {
         ctx.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
         let cgImage = ctx.makeImage()!
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaosnap-pin-e2e-\(UUID().uuidString).png")
+            .appendingPathComponent("iine-pin-e2e-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: url) }
         guard let data = ImageOutput.pngData(from: cgImage) else {
             fail("PIN-FILE", "测试 PNG 编码失败")
@@ -442,7 +450,14 @@ final class PinHarness {
             fail("PIN-ANNOTATE", "没有新建贴图窗口或导出图不可用")
             return
         }
-        view.setAnnotateMode(true)
+        guard let event = mouseDragEvent(.rightMouseDown, at: CGPoint(x: 20, y: 15), window: window),
+              let menu = view.menu(for: event),
+              let index = menu.items.firstIndex(where: { $0.title == "标注…" }) else {
+            fail("PIN-ANNOTATE", "小图右键菜单缺少标注入口")
+            window.close()
+            return
+        }
+        menu.performActionForItem(at: index)
         // zoom=1 无旋转时视图坐标即画布坐标，探测矩形底边中点。
         let probe = CGPoint(x: 0.5, y: 10.0 / 30.0)
         let beforePixel = sampledPixel(of: window, atRelative: probe)
@@ -512,11 +527,16 @@ final class PinHarness {
             window.close()
             return
         }
-        // Esc 有两级：先把选中取消掉，再按一次才退出标注模式。
+        let editBar = window.childWindows?.compactMap { $0.contentView as? PinAnnotateBar }.first
+        editBar?.toolbar.selectButton.performClick(nil)
+        if let remaining = view.annotations.first {
+            clickAt(view, window: window, at: CGPoint(x: remaining.shape.bounds.midX, y: remaining.shape.bounds.midY))
+        }
         let hadSelection = !view.selectedAnnotationIDs.isEmpty
         view.keyDown(with: esc)
         pump(0.05)
-        let deselected = view.selectedAnnotationIDs.isEmpty && view.annotationTool != nil
+        let deselected = view.selectedAnnotationIDs.isEmpty
+            && window.childWindows?.contains(where: { $0.contentView is PinAnnotateBar }) == true
         view.keyDown(with: esc)
         pump(0.05)
         if window.isVisible, view.annotationTool == nil, !hadSelection || deselected {
@@ -642,7 +662,7 @@ final class PinHarness {
         let textBefore = view.annotations.count
         clickAt(view, window: window, at: CGPoint(x: 6, y: 6))
         pump(0.05)
-        if let editor = view.subviews.compactMap({ $0 as? NSTextView }).first {
+        if let editor = firstTextView(in: view) {
             editor.string = "文字"
             if let commit = keyEvent(keyCode: 36, characters: "\r", modifiers: [.command], window: window) {
                 editor.keyDown(with: commit)
@@ -744,7 +764,7 @@ final class PinHarness {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else { return }
-        let url = URL(fileURLWithPath: "/tmp/yaosnap-verify/evidence/pin-annotate-layout.png")
+        let url = URL(fileURLWithPath: "/tmp/iine-verify/evidence/pin-annotate-layout.png")
         try? png.write(to: url)
         print("EVIDENCE \(url.path)")
     }
@@ -847,7 +867,8 @@ final class PinHarness {
         clickAt(view, window: window, at: CGPoint(x: 36, y: 4))
         pump(0.05)
         let deselected = view.selectedAnnotationIDs.isEmpty && view.annotations.count == 1
-        // 再点回矩形的左边描边：命中即选中，也不产生新一笔。
+        let editBar = window.childWindows?.compactMap { $0.contentView as? PinAnnotateBar }.first
+        editBar?.toolbar.selectButton.performClick(nil)
         clickAt(view, window: window, at: CGPoint(x: 10, y: 15))
         pump(0.05)
         if autoSelected, deselected, view.selectedAnnotationIDs == [original.id],
@@ -860,8 +881,7 @@ final class PinHarness {
             )
         }
 
-        // 从描边上拖 6pt：整笔平移，数量不变。
-        dragAnnotation(view, window: window, from: CGPoint(x: 10, y: 15), to: CGPoint(x: 16, y: 21))
+        dragAnnotation(view, window: window, from: CGPoint(x: 20, y: 15), to: CGPoint(x: 26, y: 21))
         pump(0.05)
         let movedShape = view.annotations.first?.shape
         var movedBy: CGPoint?
@@ -1534,7 +1554,7 @@ struct P3PinE2EMain {
             let app = NSApplication.shared
             app.setActivationPolicy(.accessory)
 
-            let base = URL(fileURLWithPath: "/tmp/yaosnap-verify", isDirectory: true)
+            let base = URL(fileURLWithPath: "/tmp/iine-verify", isDirectory: true)
             let evidence = base.appendingPathComponent("evidence", isDirectory: true)
             try? FileManager.default.createDirectory(at: evidence, withIntermediateDirectories: true)
 

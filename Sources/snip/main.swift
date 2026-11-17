@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import YaosnapCore
+import IineCore
 
 private func message(for error: Error) -> String {
     guard let error = error as? CommandLineParseError else {
@@ -37,7 +37,7 @@ do {
         let resolved = resolveSavePath(request)
         guard NSWorkspace.shared.open(resolved.url) else {
             FileHandle.standardError.write(
-                Data("无法交给 Yaosnap 处理：\(resolved.url.absoluteString)\n".utf8)
+                Data("无法交给 ii ne 处理：\(resolved.url.absoluteString)\n".utf8)
             )
             exit(1)
         }

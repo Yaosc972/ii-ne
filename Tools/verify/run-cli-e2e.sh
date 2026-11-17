@@ -3,7 +3,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 
-if ! ./build.sh; then
+if [ "${IINE_SKIP_BUILD:-0}" != "1" ] && ! ./build.sh; then
     echo "SUMMARY passes=0 failures=1"
     exit 1
 fi
@@ -15,7 +15,7 @@ pass() { PASS=$((PASS + 1)); echo "PASS $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "FAIL $1"; }
 
 [ -x "$BIN" ] && pass "snip binary exists" || fail "snip binary exists"
-[ -d "$PWD/Build/Yaosnap.app" ] && pass "app bundle exists" || fail "app bundle exists"
+[ -d "$PWD/Build/ii ne.app" ] && pass "app bundle exists" || fail "app bundle exists"
 
 OUT="$("$BIN" --help 2>&1)"
 CODE=$?
@@ -31,27 +31,27 @@ for ARGS in "bogus" "-o" "--pos 1" "--pos left 2" "--delay 0" "--delay 61"; do
     [ "$CODE" -ne 0 ] && pass "invalid args '$ARGS' exits $CODE" || fail "invalid args '$ARGS' exits 0"
 done
 
-grep -q 'application(_ application: NSApplication, open urls: \[URL\])' Sources/Yaosnap/AppDelegate.swift \
+grep -q 'application(_ application: NSApplication, open urls: \[URL\])' Sources/Iine/AppDelegate.swift \
     && pass "AppDelegate implements application(_:open:)" \
     || fail "AppDelegate implements application(_:open:)"
-grep -q 'commandRouter.handle(url)' Sources/Yaosnap/AppDelegate.swift \
+grep -q 'commandRouter.handle(url)' Sources/Iine/AppDelegate.swift \
     && pass "AppDelegate routes URLs" \
     || fail "AppDelegate routes URLs"
-grep -q '<string>yaosnap</string>' Resources/Info.plist \
-    && pass "Info.plist registers yaosnap scheme" \
-    || fail "Info.plist registers yaosnap scheme"
+grep -q '<string>iine</string>' Resources/Info.plist \
+    && pass "Info.plist registers iine scheme" \
+    || fail "Info.plist registers iine scheme"
 
-mkdir -p /tmp/yaosnap-verify/build
+mkdir -p /tmp/iine-verify/build
 swiftc -O -target "$(uname -m)-apple-macos12.0" \
     -I "$PWD/.build/release" \
     Tools/verify/CLIE2E.swift \
-    "$PWD/.build/release/YaosnapCore.o" \
-    -o /tmp/yaosnap-verify/build/cliharness
+    "$PWD/.build/release/IineCore.o" \
+    -o /tmp/iine-verify/build/cliharness
 COMPILE_CODE=$?
 if [ "$COMPILE_CODE" -ne 0 ]; then
     fail "compile URL contract harness"
 else
-    HARNESS_OUT="$(/tmp/yaosnap-verify/build/cliharness)"
+    HARNESS_OUT="$(/tmp/iine-verify/build/cliharness)"
     echo "$HARNESS_OUT"
     HARNESS_PASSES="$(echo "$HARNESS_OUT" | sed -n 's/^HARNESS passes=\([0-9]*\) failures=.*/\1/p')"
     HARNESS_FAILURES="$(echo "$HARNESS_OUT" | sed -n 's/^HARNESS passes=[0-9]* failures=\([0-9]*\)$/\1/p')"

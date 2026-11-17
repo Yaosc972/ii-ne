@@ -2,26 +2,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "Yaosnap",
+    name: "Iine",
     platforms: [.macOS(.v12)],
     targets: [
         .target(
-            name: "YaosnapCore",
+            name: "IineCore",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "Yaosnap",
-            dependencies: ["YaosnapCore"],
+            name: "Iine",
+            dependencies: ["IineCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
             name: "snip",
-            dependencies: ["YaosnapCore"],
+            dependencies: ["IineCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
-            name: "YaosnapCoreTests",
-            dependencies: ["YaosnapCore"],
+            name: "IineCoreTests",
+            dependencies: ["IineCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

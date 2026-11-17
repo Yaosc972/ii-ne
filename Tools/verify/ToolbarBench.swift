@@ -1,5 +1,5 @@
 import AppKit
-import YaosnapCore
+import IineCore
 
 @main
 struct Bench {

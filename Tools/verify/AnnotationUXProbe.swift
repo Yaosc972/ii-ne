@@ -1,14 +1,14 @@
 import AppKit
 import CoreGraphics
 import Foundation
-import YaosnapCore
+import IineCore
 
 /// 标注交互探针：复现「在已有形状内部起笔变成拖动旧形状」与「画完不能直接拉手柄」。
 @MainActor
 final class ProbeWiring {
     let controller = SnipController(historyStore: CaptureHistoryStore(
         directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaosnap-probe-history-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("iine-probe-history-\(UUID().uuidString)", isDirectory: true)
     ))
 
     init() {

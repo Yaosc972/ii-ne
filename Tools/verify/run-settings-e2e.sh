@@ -4,15 +4,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-./build.sh
+if [ "${IINE_SKIP_BUILD:-0}" != "1" ]; then
+    ./build.sh
+fi
 
-mkdir -p /tmp/yaosnap-verify/build
+mkdir -p /tmp/iine-verify/build
 
 swiftc -O -target "$(uname -m)-apple-macos12.0" \
     -I "$PWD/.build/release" \
-    Sources/Yaosnap/Settings/SettingsWindowController.swift \
+    Sources/Iine/UI/AppComponents.swift \
+    Sources/Iine/UI/FormControls.swift \
+    Sources/Iine/Settings/SettingsWindowController.swift \
     Tools/verify/SettingsE2E.swift \
-    "$PWD/.build/release/YaosnapCore.o" \
-    -o /tmp/yaosnap-verify/build/settingsharness
+    "$PWD/.build/release/IineCore.o" \
+    -o /tmp/iine-verify/build/settingsharness
 
-/tmp/yaosnap-verify/build/settingsharness
+if [ "${IINE_COMPILE_ONLY:-0}" != "1" ]; then
+    /tmp/iine-verify/build/settingsharness
+fi

@@ -3,7 +3,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-import YaosnapCore
+import IineCore
 
 /// P1 验收 harness。编译真实 SnipController / OverlayView 源码，
 /// 用真实通知链路驱动 start / 拖拽 / 按键 / 复制 / 保存，并截图留证。
@@ -11,7 +11,7 @@ import YaosnapCore
 final class ObserverWiring {
     let controller = SnipController(historyStore: CaptureHistoryStore(
         directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaosnap-p1-history-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("iine-p1-history-\(UUID().uuidString)", isDirectory: true)
     ))
     /// 记录通知是否真的被接线，防止 AppDelegate 与 harness 同时漏注册同一类事件。
     private(set) var textRecognizeRequests = 0
@@ -412,12 +412,12 @@ final class Harness {
     func runWindowSnap() {
         let all = WindowDetector.onScreenWindows(ownPID: getpid())
         let candidates = WindowDetector.snapCandidates(from: all, ownPID: getpid())
-        guard let target = candidates.first else {
+        guard let target = candidates.first(where: { !$0.bounds.intersection(CGDisplayBounds(CGMainDisplayID())).isEmpty }) else {
             fail("SNAP", "屏幕上没有可吸附窗口")
             return
         }
-        // 选一个只被最顶层窗口覆盖的点，确保 hover 命中预期窗口。
-        let probe = CGPoint(x: target.bounds.minX + 200, y: target.bounds.minY + 700)
+        let visibleBounds = target.bounds.intersection(CGDisplayBounds(CGMainDisplayID()))
+        let probe = CGPoint(x: visibleBounds.midX, y: visibleBounds.midY)
         guard let hit = WindowDetector.window(at: probe, in: candidates), hit == target else {
             fail("SNAP", "探测点 \(probe) 命中的窗口不是预期窗口 \(target.ownerName)")
             return
@@ -495,16 +495,16 @@ final class Harness {
             return
         }
         let defaultName = panel.nameFieldStringValue
-        let namePattern = try! NSRegularExpression(pattern: #"^Yaosnap_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.png$"#)
+        let namePattern = try! NSRegularExpression(pattern: #"^ii-ne_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.png$"#)
         let nameRange = NSRange(defaultName.startIndex..., in: defaultName)
         if namePattern.firstMatch(in: defaultName, range: nameRange) != nil {
             pass("SAVE-DEFAULTNAME", "默认文件名 \(defaultName) 符合命名规则")
         } else {
-            fail("SAVE-DEFAULTNAME", "默认文件名 \(defaultName) 不符合 Yaosnap_yyyy-MM-dd_HH-mm-ss.png")
+            fail("SAVE-DEFAULTNAME", "默认文件名 \(defaultName) 不符合 ii-ne_yyyy-MM-dd_HH-mm-ss.png")
         }
 
         // 面板显示后改 directoryURL / nameFieldStringValue 会被忽略（实测），
-        // 直接验证生产代码给的默认落点（桌面 + Yaosnap_时间戳.png）。
+        // 直接验证生产代码给的默认落点（桌面 + ii-ne_时间戳.png）。
         let predictedURL = panel.url
         let existedBefore = predictedURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
         info("SAVE-PREDICTED", "panel.url=\(predictedURL?.path ?? "nil") existedBefore=\(existedBefore)")
@@ -632,16 +632,21 @@ final class Harness {
         _ = capture("09-actionbar.png")
 
         let buttons = bar.subviews.compactMap { $0 as? NSButton }
-        // 按内容推导：选择 + 形状目录 + 颜色/笔尖/线型 + 输出动作，不写死总数。
-        let expectedTitles = ["选择"]
-            + ShapeCatalog.p2.map(\.title)
-            + ["颜色", "笔尖", "线型", "背景", "箭头", "撤销", "重做", "复制", "提取文字", "翻译", "翻译方向", "滚动截图", "识别码", "保存", "贴到屏幕", "分享", "取消"]
-        let actualTitles = buttons.compactMap(\.toolTip)
-        guard actualTitles.count == expectedTitles.count,
-              Set(actualTitles) == Set(expectedTitles) else {
-            let missing = Set(expectedTitles).subtracting(actualTitles).sorted()
-            let extra = Set(actualTitles).subtracting(expectedTitles).sorted()
-            fail("ACTIONBAR-BUTTONS", "按钮内容不符 缺=\(missing) 多=\(extra)")
+        let visibleButtons = buttons.filter { !$0.isHidden }
+        let darkStateIcons = [bar.penButton, bar.lineStyleButton].allSatisfy { button in
+            var readable = false
+            button?.effectiveAppearance.performAsCurrentDrawingAppearance {
+                if let color = button?.contentTintColor?.usingColorSpace(.sRGB) {
+                    readable = max(color.redComponent, color.greenComponent, color.blueComponent) < 0.4
+                }
+            }
+            return readable
+        }
+        guard Set(bar.toolButtons.keys) == Set(ShapeKind.allCases),
+              bar.frame.width < 800,
+              visibleButtons.count < ShapeKind.allCases.count + 20,
+              darkStateIcons else {
+            fail("ACTIONBAR-BUTTONS", "分组工具入口、可见密度或状态图标着色错误")
             endSession()
             return
         }
@@ -650,7 +655,7 @@ final class Harness {
         )
         let expected = expectedCrop(from: view.shot, imageRect: imageRect)
         NSPasteboard.general.clearContents()
-        guard let copyButton = buttons.first(where: { $0.toolTip == "复制" }) else {
+        guard let copyButton = buttons.first(where: { ($0.toolTip ?? "").hasPrefix("复制") }) else {
             fail("ACTIONBAR-COPY", "工具条上找不到复制按钮")
             endSession()
             return
@@ -669,7 +674,7 @@ final class Harness {
         guard let (window2, view2) = beginSession("ACTIONBAR-X") else { return }
         drag(view2, window: window2, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 500, y: 400))
         guard let bar2 = view2.subviews.compactMap({ $0 as? AnnotateToolbar }).first,
-              let cancelButton = bar2.subviews.compactMap({ $0 as? NSButton }).last else {
+              let cancelButton = bar2.subviews.compactMap({ $0 as? NSButton }).first(where: { ($0.toolTip ?? "").hasPrefix("取消") }) else {
             fail("ACTIONBAR-X", "找不到取消按钮")
             endSession()
             return
@@ -717,8 +722,9 @@ final class Harness {
 
         let all = WindowDetector.onScreenWindows(ownPID: getpid())
         let candidates = WindowDetector.snapCandidates(from: all, ownPID: getpid())
-        if let target = candidates.first {
-            let probe = CGPoint(x: target.bounds.minX + 200, y: target.bounds.minY + 700)
+        if let target = candidates.first(where: { !$0.bounds.intersection(view.shot.bounds).isEmpty }) {
+            let visibleBounds = target.bounds.intersection(view.shot.bounds)
+            let probe = CGPoint(x: visibleBounds.midX, y: visibleBounds.midY)
             if WindowDetector.window(at: probe, in: candidates) == target {
                 let viewPoint = CGPoint(
                     x: probe.x - view.shot.bounds.minX,
@@ -728,9 +734,11 @@ final class Harness {
                     view.mouseMoved(with: move)
                     pump(0.25)
                 }
+                let physical = CGPoint(x: (probe.x - view.shot.bounds.minX) * view.shot.scale,
+                                       y: (probe.y - view.shot.bounds.minY) * view.shot.scale)
                 if let hovered = capture("11-window-hover-bright.png"),
-                   let hoverLuminance = luminance(hovered, atPhysical: probe),
-                   let originalLuminance = luminance(view.shot.image, atPhysical: probe),
+                   let hoverLuminance = luminance(hovered, atPhysical: physical),
+                   let originalLuminance = luminance(view.shot.image, atPhysical: physical),
                    originalLuminance > 0.02 {
                     let hoverRatio = hoverLuminance / originalLuminance
                     if hoverRatio > 0.9 {
@@ -757,7 +765,7 @@ final class Harness {
     func runWhiteboardExport() {
         let wiring = ObserverWiring()
         let board = wiring.controller
-        let suite = "yaosnap.p1.whiteboard"
+        let suite = "iine.p1.whiteboard"
         guard let defaults = UserDefaults(suiteName: suite) else {
             fail("WHITEBOARD-EXPORT", "无法创建测试 UserDefaults suite")
             return
@@ -820,7 +828,7 @@ final class Harness {
     func runTransparentWhiteboardExport() {
         let wiring = ObserverWiring()
         let board = wiring.controller
-        let suite = "yaosnap.p1.whiteboard-transparent"
+        let suite = "iine.p1.whiteboard-transparent"
         guard let defaults = UserDefaults(suiteName: suite) else {
             fail("WHITEBOARD-TRANSPARENT", "无法创建测试 UserDefaults suite")
             return
@@ -893,7 +901,7 @@ final class Harness {
 
         let empty = SnipController(historyStore: CaptureHistoryStore(
             directory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("yaosnap-p1-empty-\(UUID().uuidString)", isDirectory: true)
+                .appendingPathComponent("iine-p1-empty-\(UUID().uuidString)", isDirectory: true)
         ))
         let emptyStatus = makeStatusController(reading: { empty.historySnapshot })
         emptyStatus.menuNeedsUpdate(emptyStatus.menu)
@@ -1037,7 +1045,7 @@ struct P1E2EMain {
             let app = NSApplication.shared
             app.setActivationPolicy(.accessory)
 
-            let base = URL(fileURLWithPath: "/tmp/yaosnap-verify", isDirectory: true)
+            let base = URL(fileURLWithPath: "/tmp/iine-verify", isDirectory: true)
             let evidence = base.appendingPathComponent("evidence", isDirectory: true)
             try? FileManager.default.createDirectory(at: evidence, withIntermediateDirectories: true)
 

@@ -1,6 +1,6 @@
 import CoreGraphics
 import Foundation
-import YaosnapCore
+import IineCore
 
 func makeImage(width: Int, height: Int, pattern: (Int, Int) -> UInt8) -> CGImage {
     let bytesPerRow = width * 4

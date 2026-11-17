@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""从图标资源包生成 AppIcon.icns 与状态栏图标。
+"""从透明 logo 生成应用、菜单栏和 README 图标。
 
-两条约定：
-- 应用图标必须是**满幅**的：macOS 26 会自己套圆角与留白，再自己画圆角反而
-  会变成「浅色底板里嵌一块黑方块」（实测过）。macOS 12–15 上直接显示直角方块，
-  所以这里只保证满幅、黑底、S 居中。
-- 状态栏图是模板图，18pt 下软边会糊，剪影的 alpha 要先拉陡。
+应用图标保留母图的构图与留白，使用浅米色背景。
+菜单栏使用去除透明留白的单色模板，由系统适配明暗。
 
 用法：
     python3 Tools/make-app-icon.py                      # 用仓库里的 Assets/logo-1024.png
@@ -15,19 +12,15 @@
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image
 
 CANVAS = 1024
-# 资源截图的底色（与资源包 AppIcon-Black 一致）。
-BACKDROP = (0, 0, 0, 255)
-# S 在画布上占的比例，留出呼吸空间。
-LOGO_RATIO = 0.74
+BACKDROP = (255, 247, 234, 255)
 
 ICONSET_SIZES = [
     ("icon_16x16.png", 16),
@@ -42,19 +35,17 @@ ICONSET_SIZES = [
     ("icon_512x512@2x.png", 1024),
 ]
 
-# 状态栏/菜单里是模板图，只要 S 的剪影，颜色由系统定。
+# 状态栏和菜单使用同一 logo 的剪影，颜色由系统决定。
 STATUS_SIZES = [("StatusBarIcon.png", 18), ("StatusBarIcon@2x.png", 36)]
 MENU_SIZES = [("MenuItemIcon.png", 16), ("MenuItemIcon@2x.png", 32)]
 
 
 def compose_app_icon(logo: Image.Image) -> Image.Image:
-    """满幅黑底 + 居中的 S。圆角与留白交给系统。"""
+    """保留母图留白，圆角交给系统。"""
     canvas = Image.new("RGBA", (CANVAS, CANVAS), BACKDROP)
-    side = int(CANVAS * LOGO_RATIO)
     scaled = logo.copy()
-    scaled.thumbnail((side, side), Image.LANCZOS)
+    scaled.thumbnail((CANVAS, CANVAS), Image.LANCZOS)
     canvas.alpha_composite(scaled, ((CANVAS - scaled.width) // 2, (CANVAS - scaled.height) // 2))
-    # 满幅图标不要透明通道：留一行 alpha 反而会被系统当成异形图标再加一层底板。
     return canvas.convert("RGB")
 
 
@@ -72,7 +63,10 @@ def sharpen_alpha(alpha: Image.Image, low: int = 96, high: int = 168) -> Image.I
 
 def silhouette(logo: Image.Image, size: int) -> Image.Image:
     """模板图：黑色剪影 + 原始 alpha，系统会按明暗自动着色。"""
-    scaled = logo.copy()
+    bounds = logo.getchannel("A").point(lambda value: 255 if value >= 8 else 0).getbbox()
+    if bounds is None:
+        raise ValueError("Logo has no visible pixels")
+    scaled = logo.crop(bounds)
     scaled.thumbnail((size, size), Image.LANCZOS)
     ink = Image.new("RGBA", scaled.size, (0, 0, 0, 255))
     ink.putalpha(sharpen_alpha(scaled.getchannel("A")))
@@ -95,18 +89,21 @@ def main() -> None:
         help="图标资源包目录（含 PNG/）；省略时用仓库里的 Assets/logo-1024.png",
     )
     parser.add_argument("--out", default="Resources", help="输出目录")
-    parser.add_argument("--preview", default="/tmp/yaosnap-verify/evidence")
+    parser.add_argument("--preview", default="/tmp/iine-verify/evidence")
     args = parser.parse_args()
 
+    root = Path(__file__).resolve().parent.parent
     out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
     if args.pack:
         logo_path = Path(args.pack).expanduser() / "PNG" / "Logo-Transparent-1024.png"
     else:
         # 仓库自带母图，不依赖外面那份资源包。
-        logo_path = Path(__file__).resolve().parent.parent / "Assets" / "logo-1024.png"
+        logo_path = root / "Assets" / "logo-1024.png"
     logo = Image.open(logo_path).convert("RGBA")
 
     icon = compose_app_icon(logo)
+    write_png(icon.resize((512, 512), Image.LANCZOS), root / "Assets" / "app-icon.png")
     with tempfile.TemporaryDirectory() as tmp:
         iconset = Path(tmp) / "AppIcon.iconset"
         for name, size in ICONSET_SIZES:
