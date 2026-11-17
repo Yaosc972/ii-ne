@@ -8,7 +8,9 @@
 - 状态栏图是模板图，18pt 下软边会糊，剪影的 alpha 要先拉陡。
 
 用法：
-    python3 Tools/make-app-icon.py <资源包目录> [--preview 输出目录]
+    python3 Tools/make-app-icon.py                      # 用仓库里的 Assets/logo-1024.png
+    python3 Tools/make-app-icon.py <资源包目录>          # 直接读原始资源包
+    python3 Tools/make-app-icon.py --preview <目录>
 """
 from __future__ import annotations
 
@@ -86,14 +88,23 @@ def write_png(image: Image.Image, path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("pack", help="图标资源包目录（含 PNG/ 与 macOS/）")
+    parser.add_argument(
+        "pack",
+        nargs="?",
+        default=None,
+        help="图标资源包目录（含 PNG/）；省略时用仓库里的 Assets/logo-1024.png",
+    )
     parser.add_argument("--out", default="Resources", help="输出目录")
     parser.add_argument("--preview", default="/tmp/yaosnap-verify/evidence")
     args = parser.parse_args()
 
-    pack = Path(args.pack).expanduser()
     out = Path(args.out)
-    logo = Image.open(pack / "PNG" / "Logo-Transparent-1024.png").convert("RGBA")
+    if args.pack:
+        logo_path = Path(args.pack).expanduser() / "PNG" / "Logo-Transparent-1024.png"
+    else:
+        # 仓库自带母图，不依赖外面那份资源包。
+        logo_path = Path(__file__).resolve().parent.parent / "Assets" / "logo-1024.png"
+    logo = Image.open(logo_path).convert("RGBA")
 
     icon = compose_app_icon(logo)
     with tempfile.TemporaryDirectory() as tmp:
