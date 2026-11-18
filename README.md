@@ -24,7 +24,7 @@ ii ne 是一个用 Swift + AppKit 写的原生 macOS 截图工具，**没有任�
 它是我按自己每天在用的工作流，对 Snipaste 2 的重新实现（不复用其代码或二进制）。
 功能按实际使用取舍，交互尽量贴近 Snipaste。
 
-<img src="Assets/toolbar.png" width="100%" alt="标注工具条">
+<img src="site/media/toolbar.webp" width="748" alt="新版浅色截图工具栏，选中箭头工具后显示颜色、笔宽和箭头样式">
 
 ### 功能
 
@@ -195,6 +195,8 @@ ii ne is a native macOS screenshot tool written in Swift and AppKit, with **no t
 dependencies**. It is a personal reimplementation of Snipaste 2 that follows the workflow I use
 every day. It does not reuse Snipaste code or binaries, features are scoped by actual use, and the
 interaction model follows Snipaste closely.
+
+<img src="site/media/toolbar.webp" width="748" alt="Light capture toolbar with the arrow tool selected and its style controls below">
 
 ### Features
 
