@@ -1474,6 +1474,78 @@ final class PinHarness {
         }
     }
 
+    func runEdgePlacement() {
+        guard let screen = NSScreen.screens.max(by: { $0.frame.maxX < $1.frame.maxX }) else {
+            fail("PIN-EDGE", "没有可用屏幕")
+            return
+        }
+        let visible = screen.visibleFrame
+        let size = CGSize(width: 120, height: 80)
+        func makePin() -> PinWindow? {
+            let image = PasteImage(image: makeImage(width: 120, height: 80), pointSize: size)
+            let existing = Set(allPinWindows().map(\.windowNumber))
+            guard controller.pin(image: image, at: nil) else { return nil }
+            return allPinWindows().first { !existing.contains($0.windowNumber) }
+        }
+        guard let first = makePin(), let second = makePin(), let view = first.contentView else {
+            fail("PIN-EDGE", "未能创建两张测试贴图")
+            controller.closeAll()
+            return
+        }
+        defer { controller.closeAll() }
+        let firstStart = CGPoint(x: visible.maxX - size.width, y: floor(visible.midY))
+        let secondStart = CGPoint(x: firstStart.x - 80, y: firstStart.y - 100)
+        first.setFrameOrigin(firstStart)
+        second.setFrameOrigin(secondStart)
+
+        let grab = CGPoint(x: size.width / 2, y: size.height / 2)
+        let outside = CGPoint(x: grab.x + size.width * 2, y: grab.y)
+        guard let down = mouseDragEvent(.leftMouseDown, at: grab, window: first),
+              let drag = mouseDragEvent(.leftMouseDragged, at: outside, window: first),
+              let up = mouseDragEvent(.leftMouseUp, at: outside, window: first) else {
+            fail("PIN-EDGE", "未能生成窗口拖动事件")
+            return
+        }
+        view.mouseDown(with: down)
+        view.mouseDragged(with: drag)
+        view.mouseUp(with: up)
+        pump(0.1)
+        let overlap = first.frame.intersection(visible)
+        if first.frame.maxX > visible.maxX, overlap.width == 24 {
+            pass("PIN-EDGE", "拖出屏幕右侧时留出 24 点可拖动区域")
+        } else {
+            fail("PIN-EDGE", "拖动后窗口 \(first.frame)，可见部分 \(overlap)")
+        }
+        first.adjustScale(by: 0.1)
+        if first.frame.maxX > visible.maxX, first.frame.intersection(visible).width >= 24 {
+            pass("PIN-EDGE-SCALE", "边缘处缩放后仍可停在原区域")
+        } else {
+            fail("PIN-EDGE-SCALE", "缩放后窗口 \(first.frame)")
+        }
+
+        first.setScale(1)
+        first.move(to: firstStart)
+        controller.toggleSelection(pinID: first.pinID)
+        controller.toggleSelection(pinID: second.pinID)
+        controller.beginDrag(of: first)
+        _ = controller.dragSelection(by: CGPoint(x: size.width * 2, y: 0))
+        pump(0.1)
+        let firstDX = first.frame.minX - firstStart.x
+        let secondDX = second.frame.minX - secondStart.x
+        if firstDX == secondDX, first.frame.intersection(visible).width == 24 {
+            pass("PIN-MULTI-EDGE", "贴图组可越过屏幕边缘，组内间距保持一致")
+        } else {
+            fail("PIN-MULTI-EDGE", "贴图组位移 \(firstDX) / \(secondDX)")
+        }
+        _ = controller.dragSelection(by: .zero)
+        controller.endDrag()
+        if first.frame.origin == firstStart, second.frame.origin == secondStart {
+            pass("PIN-MULTI-EDGE-RETURN", "贴图组可从屏幕边缘拖回")
+        } else {
+            fail("PIN-MULTI-EDGE-RETURN", "贴图组当前位置 \(first.frame.origin) / \(second.frame.origin)")
+        }
+    }
+
     private func runBackground() {
         controller.closeAll()
         pump()
@@ -1510,6 +1582,11 @@ final class PinHarness {
     }
 
     func runAll() {
+        if CommandLine.arguments.contains("--edge-only") {
+            runEdgePlacement()
+            print("SUMMARY passes=\(passes) failures=\(failures)")
+            exit(failures == 0 ? 0 : 1)
+        }
         runFirstPin()
         runSecondPin()
         runCloseOne()
@@ -1536,6 +1613,7 @@ final class PinHarness {
         runMultiSelect()
         runMultiDrag()
         runMultiEscape()
+        runEdgePlacement()
         runBackground()
         runAnnotate()
         runAnnotateTools()

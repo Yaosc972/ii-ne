@@ -375,7 +375,7 @@ final class AnnotateToolbar: NSView {
         button.contentTintColor = AppPalette.color(.text)
         button.imageScaling = .scaleNone
         if let glyph { button.image = ToolbarGlyph.image(glyph) }
-        button.toolTip = title
+        button.hoverTitle = title
         button.setAccessibilityLabel(title)
         button.target = self
         button.action = action
@@ -427,7 +427,7 @@ final class AnnotateToolbar: NSView {
         case .serial: penTitle = "序号大小 \(currentStyle.pen.rawValue)"
         default: penTitle = "笔宽 \(Int(currentStyle.pen.lineWidth)) · 1 减小 / 2 增大"
         }
-        penButton.toolTip = penTitle
+        penButton.hoverTitle = penTitle
         penButton.setAccessibilityLabel(penTitle)
         layoutButtons()
     }
@@ -801,8 +801,8 @@ final class AnnotateToolbar: NSView {
     /// 菜单选中项与实际目标语言使用同一个值。
     func updateTranslationTarget(_ target: TranslationTarget) {
         translationTarget = target
-        translateTargetButton.toolTip = "翻译方向 · \(target.title)"
-        translateTargetButton.setAccessibilityLabel(translateTargetButton.toolTip)
+        translateTargetButton.hoverTitle = "翻译方向 · \(target.title)"
+        translateTargetButton.setAccessibilityLabel(translateTargetButton.hoverTitle)
     }
     @objc private func scanBarcodeTapped() { onScanBarcode?() }
     @objc private func saveTapped() {
@@ -823,10 +823,16 @@ final class AnnotateToolbar: NSView {
 
 @MainActor
 class HoverButton: NSButton {
+    var hoverTitle: String? {
+        didSet {
+            if oldValue != hoverTitle, isHovered { ToolbarHoverTip.shared.hide(for: self) }
+        }
+    }
     var onScroll: ((CGFloat) -> Void)?
     var currentModifiers: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
     var isSelected = false { didSet { updateAppearance() } }
     private var isHovered = false
+    private var hoverTrackingArea: NSTrackingArea?
 
     override var isEnabled: Bool { didSet { updateAppearance() } }
 
@@ -850,6 +856,7 @@ class HoverButton: NSButton {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        if isHovered { ToolbarHoverTip.shared.hide(for: self) }
         guard let onScroll else {
             super.scrollWheel(with: event)
             return
@@ -859,21 +866,45 @@ class HoverButton: NSButton {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(NSTrackingArea(
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
             owner: self
-        ))
+        )
+        hoverTrackingArea = area
+        addTrackingArea(area)
     }
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         updateAppearance()
+        if hoverTitle != nil, NSEvent.pressedMouseButtons == 0 { ToolbarHoverTip.shared.schedule(for: self) }
     }
 
     override func mouseExited(with event: NSEvent) {
+        endHover()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if isHovered { ToolbarHoverTip.shared.hide(for: self) }
+        super.mouseDown(with: event)
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        endHover()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow !== window { endHover() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    private func endHover() {
+        guard isHovered else { return }
         isHovered = false
+        ToolbarHoverTip.shared.hide(for: self)
         updateAppearance()
     }
 
@@ -904,6 +935,95 @@ class HoverButton: NSButton {
             layer.removeAnimation(forKey: "hover")
         }
         alphaValue = isEnabled ? 1 : 0.38
+    }
+}
+
+/// AppKit 的普通提示窗可能盖不到全屏截图覆盖层，提示跟随所属窗口的层级。
+@MainActor
+private final class ToolbarHoverTip: NSObject {
+    static let shared = ToolbarHoverTip()
+
+    private weak var anchor: HoverButton?
+    private var pending: Task<Void, Never>?
+    private var panel: NSPanel?
+    private let label = NSTextField(labelWithString: "")
+
+    override init() {
+        super.init()
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = AppPalette.color(.text)
+        NotificationCenter.default.addObserver(self, selector: #selector(hostDidClose(_:)),
+            name: NSWindow.willCloseNotification, object: nil)
+    }
+
+    func schedule(for button: HoverButton) {
+        dismiss()
+        anchor = button
+        pending = Task { [weak self, weak button] in
+            do { try await Task.sleep(nanoseconds: 400_000_000) }
+            catch { return }
+            guard !Task.isCancelled, let button else { return }
+            self?.show(for: button)
+        }
+    }
+
+    func hide(for button: HoverButton) {
+        if anchor === button { dismiss() }
+    }
+
+    @objc private func hostDidClose(_ notification: Notification) {
+        guard let host = notification.object as? NSWindow else { return }
+        if anchor?.window === host || panel?.parent === host { dismiss() }
+    }
+
+    private func dismiss() {
+        pending?.cancel()
+        pending = nil
+        anchor = nil
+        guard let panel, let parent = panel.parent else { return }
+        parent.removeChildWindow(panel)
+        panel.orderOut(nil)
+    }
+
+    private func show(for button: HoverButton) {
+        pending = nil
+        guard anchor === button, !button.isHiddenOrHasHiddenAncestor, !button.visibleRect.isEmpty,
+              let host = button.window, host.isVisible, !host.ignoresMouseEvents,
+              let title = button.hoverTitle, !title.isEmpty else { return }
+        let buttonFrame = host.convertToScreen(button.convert(button.visibleRect, to: nil))
+        guard let screen = NSScreen.screens.first(where: {
+            $0.frame.contains(CGPoint(x: buttonFrame.midX, y: buttonFrame.midY))
+        }) ?? host.screen else { return }
+
+        let panel = self.panel ?? makePanel()
+        label.stringValue = title
+        label.sizeToFit()
+        label.frame.origin = CGPoint(x: 9, y: 5)
+        let size = CGSize(width: label.frame.width + 18, height: label.frame.height + 10)
+        let available = screen.visibleFrame.insetBy(dx: 4, dy: 4)
+        let x = min(max(buttonFrame.midX - size.width / 2, available.minX), available.maxX - size.width)
+        let above = buttonFrame.maxY + 7
+        let y = above + size.height <= available.maxY ? above : max(available.minY, buttonFrame.minY - size.height - 7)
+        panel.setFrame(NSRect(origin: CGPoint(x: x, y: y), size: size), display: true)
+        host.addChildWindow(panel, ordered: .above)
+        panel.level = NSWindow.Level(rawValue: host.level.rawValue + 1)
+        panel.orderFront(nil)
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.appearance = NSAppearance(named: .aqua)
+        let surface = AppSurfaceView(cornerRadius: 8)
+        surface.addSubview(label)
+        panel.contentView = surface
+        self.panel = panel
+        return panel
     }
 }
 
@@ -940,6 +1060,7 @@ final class ToolbarChoiceView: NSView {
             button.target = self
             button.action = #selector(pick(_:))
             button.tag = index
+            button.hoverTitle = item.title + (item.detail.isEmpty ? "" : " · " + item.detail)
             button.setAccessibilityLabel(item.title + (item.detail.isEmpty ? "" : " " + item.detail))
             button.isSelected = item.selected
             addSubview(button)
@@ -1085,7 +1206,7 @@ final class ColorPaletteView: NSView {
                 ringed: Self.sameRGB(color, selectedColor)
             )
             swatch.isSelected = Self.sameRGB(color, selectedColor)
-            swatch.toolTip = model.isCustom(at: index) ? "自定义颜色" : "颜色 \(index + 1)"
+            swatch.hoverTitle = model.isCustom(at: index) ? "自定义颜色" : "颜色 \(index + 1)"
             swatch.target = self
             swatch.action = #selector(picked(_:))
             swatch.tag = index
@@ -1117,7 +1238,7 @@ final class ColorPaletteView: NSView {
                 ringed: abs(selectedColor.a - alpha) < 0.001
             )
             swatch.isSelected = abs(selectedColor.a - alpha) < 0.001
-            swatch.toolTip = "透明度 \(Int((alpha * 100).rounded()))%"
+            swatch.hoverTitle = "透明度 \(Int((alpha * 100).rounded()))%"
             swatch.target = self
             swatch.action = #selector(pickedAlpha(_:))
             swatch.tag = index
@@ -1180,7 +1301,7 @@ final class ColorPaletteView: NSView {
                 .font: NSFont.systemFont(ofSize: 11, weight: .medium),
             ]
         )
-        button.toolTip = toolTip
+        button.hoverTitle = toolTip
         button.target = self
         button.action = action
         return button
@@ -1360,7 +1481,7 @@ final class PenSizeView: NSView {
             button.attributedTitle = NSAttributedString(string: value, attributes: [
                 .font: NSFont.systemFont(ofSize: 11), .foregroundColor: AppPalette.color(.text),
             ])
-            button.toolTip = kind == .text ? "字号 \(value)" : "大小 \(value)"
+            button.hoverTitle = kind == .text ? "字号 \(value)" : "大小 \(value)"
             button.isSelected = pen == selected
             button.target = self
             button.action = #selector(picked(_:))

@@ -101,7 +101,7 @@ private final class UXHarness {
     }
 
     private func button(_ view: NSView, title: String) throws -> NSButton {
-        try require(descendants(view, as: NSButton.self).first { $0.title == title || $0.toolTip == title }, "找不到按钮 \(title)")
+        try require(descendants(view, as: NSButton.self).first { $0.title == title || $0.accessibilityLabel() == title }, "找不到按钮 \(title)")
     }
 
     private func image(width: Int = 1000, height: Int = 740) -> CGImage {
@@ -1243,6 +1243,9 @@ private final class UXHarness {
             }
             check(!ratios.isEmpty && ratios.allSatisfy { $0 >= 4.5 },
                   "TOOLBAR \(name) 可用工具的图标在白底上保持清晰")
+            let visibleTools = descendants(toolbar, as: HoverButton.self).filter { !$0.isHiddenOrHasHiddenAncestor }
+            check(!visibleTools.isEmpty && visibleTools.allSatisfy { $0.hoverTitle?.isEmpty == false },
+                  "TOOLTIP \(name) 的可见工具都有悬停名称")
         }
         let toolbar = PinToolbar()
         let window = host(toolbar, size: toolbar.intrinsicContentSize)
@@ -1252,6 +1255,9 @@ private final class UXHarness {
         let background = try require(representation.colorAt(x: representation.pixelsWide / 2, y: 4), "贴图操作栏背景读取失败")
         check(luminance(try resolvedColor(background, for: toolbar)) > 0.7,
               "TOOLBAR 贴图顶部操作栏保持浅色")
+        let visibleTools = descendants(toolbar, as: HoverButton.self).filter { !$0.isHiddenOrHasHiddenAncestor }
+        check(!visibleTools.isEmpty && visibleTools.allSatisfy { $0.hoverTitle?.isEmpty == false },
+              "TOOLTIP 贴图顶部操作栏的图标都有悬停名称")
         let copy = try button(toolbar, title: "复制图像")
         var copied = false
         toolbar.onCopy = { copied = true }
@@ -1268,7 +1274,7 @@ private final class UXHarness {
                   "TOOLBAR 宽度\(Int(width))的贴图操作按钮完整可见")
             let more = try require(buttons.first { $0.menu != nil }, "窄贴图缺少更多菜单")
             let menu = try require(more.menu, "贴图更多菜单缺失")
-            let available = Set(buttons.compactMap(\.toolTip) + menu.items.map(\.title))
+            let available = Set(buttons.compactMap { $0.accessibilityLabel() } + menu.items.map(\.title))
             check(actions.allSatisfy { available.contains($0) }, "TOOLBAR 窄贴图的所有操作均可通过按钮或菜单访问")
             var rotated = false
             toolbar.onRotateLeft = { rotated = true }
@@ -1277,6 +1283,49 @@ private final class UXHarness {
             check(rotated, "TOOLBAR 窄贴图菜单保留旋转操作回调")
             try render(toolbar, name: "toolbar-light-pin-compact-\(Int(width))")
         }
+    }
+
+    private func toolbarHoverNames() async throws {
+        let screen = try require(NSScreen.main, "没有用于检查悬停提示的屏幕")
+        let window = SnipOverlayWindow(screen: screen, translucent: true)
+        let root = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        let toolbar = AnnotateToolbar(initialKind: .rect, initialStyle: ShapeCatalog.entry(for: .rect)!.defaultStyle)
+        toolbar.frame.origin = CGPoint(x: 8, y: 100)
+        root.addSubview(toolbar)
+        window.contentView = root
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+
+        let tool = try require(toolbar.toolButtons[.rect], "找不到矩形工具")
+        func hover(_ button: HoverButton, _ type: NSEvent.EventType) throws {
+            let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            let event = try require(NSEvent.enterExitEvent(with: type, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, trackingNumber: 0, userData: nil), "无法创建悬停事件")
+            if type == .mouseEntered { button.mouseEntered(with: event) }
+            else { button.mouseExited(with: event) }
+        }
+
+        try hover(tool, .mouseEntered)
+        check(window.childWindows?.isEmpty != false, "TOOLTIP 刚经过按钮时不会马上弹出")
+        guard await waitUntil({ window.childWindows?.first?.isVisible == true }) else {
+            throw Missing(description: "截图覆盖层上的悬停提示未显示")
+        }
+        let panel = try require(window.childWindows?.first, "没有找到提示窗")
+        let content = try require(panel.contentView, "提示窗没有内容")
+        let labels = descendants(content, as: NSTextField.self)
+        check(labels.first?.stringValue == tool.hoverTitle && panel.level > window.level
+                && panel.ignoresMouseEvents && !panel.isKeyWindow,
+              "TOOLTIP 名称和快捷键显示在截图覆盖层上方，提示窗不拦截输入")
+        try hover(tool, .mouseExited)
+        check(!panel.isVisible && window.childWindows?.isEmpty != false, "TOOLTIP 离开工具时提示立即收起")
+
+        try hover(toolbar.translateButton, .mouseEntered)
+        try hover(toolbar.translateButton, .mouseExited)
+        try hover(tool, .mouseEntered)
+        tool.isHidden = true
+        try await Task.sleep(nanoseconds: 500_000_000)
+        check(!panel.isVisible, "TOOLTIP 快速移开或隐藏工具后不会出现迟到的提示")
     }
 
     func run() async -> Bool {
@@ -1292,6 +1341,8 @@ private final class UXHarness {
         do { try await editableHistoryReplay() }
         catch { failures += 1; print("FAIL editableHistoryReplay \(error)") }
         test("lightToolbarAppearance", lightToolbarAppearance)
+        do { try await toolbarHoverNames() }
+        catch { failures += 1; print("FAIL toolbarHoverNames \(error)") }
         do { try await scrollCaptureRecovery() }
         catch {
             failures += 1

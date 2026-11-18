@@ -655,7 +655,7 @@ final class Harness {
         )
         let expected = expectedCrop(from: view.shot, imageRect: imageRect)
         NSPasteboard.general.clearContents()
-        guard let copyButton = buttons.first(where: { ($0.toolTip ?? "").hasPrefix("复制") }) else {
+        guard let copyButton = buttons.first(where: { ($0.accessibilityLabel() ?? "").hasPrefix("复制") }) else {
             fail("ACTIONBAR-COPY", "工具条上找不到复制按钮")
             endSession()
             return
@@ -674,7 +674,7 @@ final class Harness {
         guard let (window2, view2) = beginSession("ACTIONBAR-X") else { return }
         drag(view2, window: window2, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 500, y: 400))
         guard let bar2 = view2.subviews.compactMap({ $0 as? AnnotateToolbar }).first,
-              let cancelButton = bar2.subviews.compactMap({ $0 as? NSButton }).first(where: { ($0.toolTip ?? "").hasPrefix("取消") }) else {
+              let cancelButton = bar2.subviews.compactMap({ $0 as? NSButton }).first(where: { ($0.accessibilityLabel() ?? "").hasPrefix("取消") }) else {
             fail("ACTIONBAR-X", "找不到取消按钮")
             endSession()
             return

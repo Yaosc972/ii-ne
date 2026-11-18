@@ -14,6 +14,7 @@ final class SettingsHarness {
     private final class Credentials {
         var value: String?
         var shouldFailSave = false
+        var statusChecks = 0
         var saves = 0
         var clears = 0
     }
@@ -342,6 +343,9 @@ final class SettingsHarness {
 
     private func translation(_ controller: SettingsWindowController, store: SettingsStore, credentials: Credentials) throws {
         navigate(.translation, in: controller)
+        check("key-status-on-translation-page", credentials.statusChecks == 1
+            && controller.translationKeyStatus.stringValue == "尚未保存密钥"
+            && !controller.clearKeyButton.isEnabled, "进入翻译页后显示密钥保存状态")
         check("translation-system", !controller.translationEndpointField.isHiddenOrHasHiddenAncestor
             && !controller.deepSeekKeyField.isHiddenOrHasHiddenAncestor, "系统翻译下仍可配置润色使用的 AI 服务")
         let content = try require(controller.window?.contentView, "设置内容缺失")
@@ -530,14 +534,21 @@ final class SettingsHarness {
         let store = SettingsStore(defaults: defaults)
         let credentials = Credentials()
         let access = SettingsWindowController.CredentialAccess(
-            isSaved: { credentials.value != nil },
+            status: {
+                credentials.statusChecks += 1
+                return credentials.value == nil ? .missing : .saved
+            },
             save: { value in
                 credentials.saves += 1
                 guard !credentials.shouldFailSave else { return false }
                 credentials.value = value
                 return true
             },
-            clear: { credentials.value = nil; credentials.clears += 1 }
+            clear: {
+                credentials.value = nil
+                credentials.clears += 1
+                return true
+            }
         )
         let controller = SettingsWindowController(store: store, settings: store.load(),
             credentialAccess: access, onChange: { [weak self] in self?.lastChange = $0 })
@@ -547,8 +558,14 @@ final class SettingsHarness {
             try FileManager.default.createDirectory(at: evidence, withIntermediateDirectories: true)
             let window = try require(controller.window, "设置窗口未创建")
             let content = try require(window.contentView, "设置内容缺失")
-            window.makeKeyAndOrderFront(nil)
+            controller.show()
             content.layoutSubtreeIfNeeded()
+            check("capacity-no-initial-selection", controller.restoreCapacityField.currentEditor() == nil,
+                "打开设置时未自动进入贴图数量编辑")
+            controller.close()
+            controller.show()
+            check("capacity-no-reopen-selection", controller.restoreCapacityField.currentEditor() == nil,
+                "再次打开设置时未自动进入贴图数量编辑")
             check("window", window.title == "设置", "原生设置窗口可显示")
             check("sections", controller.sectionControl.segmentCount == 5, "五个设置页面均有导航入口")
             try general(controller, store: store)
@@ -556,6 +573,8 @@ final class SettingsHarness {
             output(controller, store: store)
             try corners(controller, store: store)
             try shortcuts(controller, store: store)
+            check("key-status-lazy", credentials.statusChecks == 0,
+                "打开设置并访问常规页面时不查询钥匙串")
             try translation(controller, store: store, credentials: credentials)
             try appearanceAndLayout(controller)
 

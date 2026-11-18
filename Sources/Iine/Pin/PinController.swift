@@ -202,18 +202,18 @@ final class PinController: NSObject, NSWindowDelegate {
     @discardableResult
     func dragSelection(by delta: CGPoint) -> Bool {
         guard !dragOrigins.isEmpty else { return false }
-        // 偏移先按整组一起钳进屏幕，逐张各自钳回会改变贴图间距。
-        var applied = delta
+        let screens = NSScreen.screens.map(\.visibleFrame)
+        var sharedBounds = CGRect.infinite
         for window in pinned {
-            guard let origin = dragOrigins[window.pinID],
-                  let visible = (window.screen ?? NSScreen.main)?.visibleFrame else { continue }
-            let minDX = visible.minX - origin.x
-            let maxDX = visible.maxX - window.frame.width - origin.x
-            let minDY = visible.minY - origin.y
-            let maxDY = visible.maxY - window.frame.height - origin.y
-            applied.x = min(max(applied.x, minDX), max(maxDX, minDX))
-            applied.y = min(max(applied.y, minDY), max(maxDY, minDY))
+            guard let origin = dragOrigins[window.pinID] else { continue }
+            let target = CGPoint(x: origin.x + delta.x, y: origin.y + delta.y)
+            guard let bounds = PinWindow.reachableOrigins(for: window.frame.size, near: target, on: screens)
+            else { return true }
+            sharedBounds = sharedBounds.intersection(bounds.offsetBy(dx: -origin.x, dy: -origin.y))
         }
+        // 使用共同偏移量，避免贴图到达边缘时改变组内间距。
+        guard !sharedBounds.isNull else { return true }
+        let applied = PinWindow.clamped(delta, to: sharedBounds)
         let moved = PinSelection.moved(origins: dragOrigins, by: applied)
         for window in pinned {
             guard let origin = moved[window.pinID] else { continue }
@@ -385,18 +385,6 @@ final class PinController: NSObject, NSWindowDelegate {
         pendingCompactionIDs.append(entry.id)
         pruneCompactions()
         startNextCompaction()
-    }
-
-    /// 拖到屏幕外时把整个窗口钳回可见区域。
-    func windowDidMove(_ notification: Notification) {
-        guard let window = notification.object as? PinWindow,
-              let screen = window.screen ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
-        let frame = window.frame
-        let x = min(max(frame.minX, visible.minX), max(visible.minX, visible.maxX - frame.width))
-        let y = min(max(frame.minY, visible.minY), max(visible.minY, visible.maxY - frame.height))
-        guard x != frame.minX || y != frame.minY else { return }
-        window.setFrameOrigin(CGPoint(x: x, y: y))
     }
 
     private func present(

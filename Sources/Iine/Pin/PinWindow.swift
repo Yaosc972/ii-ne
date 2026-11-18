@@ -4,6 +4,8 @@ import IineCore
 /// 无边框置顶贴图窗口。窗口尺寸、旋转、翻转与透明度都只由 transform 派生。
 @MainActor
 final class PinWindow: NSWindow {
+    private static let dragGrip: CGFloat = 24
+
     private let pinView = PinContentView(frame: .zero)
     private(set) var pasteImage: PasteImage
     private(set) var contentFingerprint: PasteImage.ContentFingerprint?
@@ -94,14 +96,14 @@ final class PinWindow: NSWindow {
         pinView.restoreAnnotations(pasteImage.annotations)
     }
 
-    /// 从恢复列表重建。frame 与 transform 都取关闭时的原值，尺寸不再重新适配屏幕。
+    /// 从恢复列表重建，保留关闭时的尺寸与变换，并确保仍能拖回。
     init(pasteImage: PasteImage, pinID: Int, restoring entry: PinRestoreEntry) {
         basePointSize = entry.basePointSize
         self.pasteImage = pasteImage
         self.contentFingerprint = entry.fingerprint ?? pasteImage.contentFingerprint
         self.pinID = pinID
         super.init(
-            contentRect: entry.frame,
+            contentRect: Self.reachableFrame(entry.frame),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -143,7 +145,7 @@ final class PinWindow: NSWindow {
         refreshImage()
         pinView.transform = entry.transform
         pinView.needsDisplay = true
-        setFrame(entry.frame, display: true)
+        setFrame(Self.reachableFrame(entry.frame), display: true)
         invalidateCursorRects(for: pinView)
     }
 
@@ -397,7 +399,7 @@ final class PinWindow: NSWindow {
         case topLeft
     }
 
-    /// 以当前中心（裁剪时以左上角）为锚重设尺寸，再保证窗口留在屏幕可见区域。
+    /// 以当前中心（裁剪时以左上角）为锚重设尺寸，并留出可拖回的区域。
     private func applyTransform(anchor: Anchor = .center) {
         pinView.transform = transform
         refreshImage()
@@ -415,22 +417,53 @@ final class PinWindow: NSWindow {
             origin = CGPoint(x: oldFrame.minX, y: oldFrame.maxY - size.height)
         }
         setFrame(
-            CGRect(origin: origin, size: size),
+            Self.reachableFrame(CGRect(origin: origin, size: size)),
             display: true
         )
         pinView.needsDisplay = true
-        clampToVisibleFrame()
         invalidateCursorRects(for: pinView)
     }
 
-    func clampToVisibleFrame() {
-        guard let screen = screen ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
-        let current = frame
-        let x = min(max(current.minX, visible.minX), max(visible.minX, visible.maxX - current.width))
-        let y = min(max(current.minY, visible.minY), max(visible.minY, visible.maxY - current.height))
-        guard x != current.minX || y != current.minY else { return }
-        setFrameOrigin(CGPoint(x: x, y: y))
+    func move(to origin: CGPoint) {
+        let target = Self.reachableFrame(CGRect(origin: origin, size: frame.size)).origin
+        if target != frame.origin { setFrameOrigin(target) }
+    }
+
+    private static func reachableFrame(_ frame: CGRect) -> CGRect {
+        let screens = NSScreen.screens.map(\.visibleFrame)
+        guard let bounds = reachableOrigins(for: frame.size, near: frame.origin, on: screens) else { return frame }
+        return CGRect(origin: clamped(frame.origin, to: bounds), size: frame.size)
+    }
+
+    /// 每块屏幕允许的窗口原点范围。优先保留目标位置，否则用距离最近的屏幕。
+    static func reachableOrigins(for size: CGSize, near origin: CGPoint, on screens: [CGRect]) -> CGRect? {
+        let gripWidth = min(dragGrip, size.width)
+        let gripHeight = min(dragGrip, size.height)
+        var nearest: CGRect?
+        var nearestDistance = CGFloat.infinity
+        for screen in screens {
+            let bounds = CGRect(
+                x: screen.minX - size.width + gripWidth,
+                y: screen.minY - size.height + gripHeight,
+                width: screen.width + size.width - 2 * gripWidth,
+                height: screen.height + size.height - 2 * gripHeight
+            )
+            let reachable = clamped(origin, to: bounds)
+            if reachable == origin { return bounds }
+            let dx = reachable.x - origin.x
+            let dy = reachable.y - origin.y
+            let distance = dx * dx + dy * dy
+            if distance < nearestDistance {
+                nearest = bounds
+                nearestDistance = distance
+            }
+        }
+        return nearest
+    }
+
+    static func clamped(_ point: CGPoint, to bounds: CGRect) -> CGPoint {
+        CGPoint(x: min(max(point.x, bounds.minX), bounds.maxX),
+                y: min(max(point.y, bounds.minY), bounds.maxY))
     }
 }
 
@@ -906,7 +939,7 @@ final class PinContentView: NSView, NSSharingServicePickerDelegate {
         let current = pinWindow.convertPoint(toScreen: event.locationInWindow)
         let delta = CGPoint(x: current.x - dragStart.x, y: current.y - dragStart.y)
         if pinWindow.pinController?.dragSelection(by: delta) == true { return }
-        pinWindow.setFrameOrigin(CGPoint(
+        pinWindow.move(to: CGPoint(
             x: windowStart.x + delta.x,
             y: windowStart.y + delta.y
         ))
@@ -1204,7 +1237,6 @@ final class PinContentView: NSView, NSSharingServicePickerDelegate {
     @objc private func fitToScreenFromMenu() {
         guard let pinWindow = window as? PinWindow else { return }
         pinWindow.setScale(1)
-        pinWindow.clampToVisibleFrame()
     }
 
     @objc private func rotateLeftFromMenu() {
@@ -1446,10 +1478,9 @@ final class PinContentView: NSView, NSSharingServicePickerDelegate {
         let rawScale = useHorizontal ? dx / widthBase : dy / heightBase
         pinWindow.setScale(rawScale)
         let frame = pinWindow.frame
-        pinWindow.setFrameOrigin(CGPoint(
+        pinWindow.move(to: CGPoint(
             x: state.anchorGlobal.x - state.anchorFraction.x * frame.width,
             y: state.anchorGlobal.y - state.anchorFraction.y * frame.height
         ))
-        pinWindow.clampToVisibleFrame()
     }
 }

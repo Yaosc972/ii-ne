@@ -5,16 +5,33 @@ public struct TranslationCredentialStore {
     static let service = "com.iine.app.translation"
     private static let account = "deepseek"
 
+    public enum Status: Equatable {
+        case saved, missing, unavailable
+    }
+
     enum Lookup {
         case found(String), notFound, unavailable
     }
 
     struct KeychainAccess {
+        let status: (String) -> Status
         let read: (String) -> Lookup
         let write: (String, String) -> Bool
         let remove: (String) -> Bool
 
         static let live = KeychainAccess(
+            status: { service in
+                var query = TranslationCredentialStore.query(service: service)
+                // File-based keychain items can require authorization to return secret data.
+                query[kSecReturnAttributes as String] = kCFBooleanTrue
+                query[kSecMatchLimit as String] = kSecMatchLimitOne
+                var attributes: CFTypeRef?
+                switch SecItemCopyMatching(query as CFDictionary, &attributes) {
+                case errSecSuccess: return .saved
+                case errSecItemNotFound: return .missing
+                default: return .unavailable
+                }
+            },
             read: { service in
                 var query = TranslationCredentialStore.query(service: service)
                 query[kSecReturnData as String] = kCFBooleanTrue
@@ -53,6 +70,12 @@ public struct TranslationCredentialStore {
 
     public init() { keychain = .live }
     init(keychain: KeychainAccess) { self.keychain = keychain }
+
+    public func status() -> Status {
+        let current = keychain.status(Self.service)
+        guard current == .missing else { return current }
+        return keychain.status(LegacyBrandMigration.credentialService)
+    }
 
     public func load() -> String? {
         switch keychain.read(Self.service) {

@@ -2365,8 +2365,8 @@ final class AnnotateHarness {
             endSession()
             return
         }
-        guard pinButton.toolTip == "贴到屏幕" else {
-            fail("PIN-BUTTON", "按钮标题不符：\(pinButton.toolTip ?? "nil")")
+        guard pinButton.accessibilityLabel() == "贴到屏幕" else {
+            fail("PIN-BUTTON", "按钮标题不符：\(pinButton.accessibilityLabel() ?? "nil")")
             endSession()
             return
         }
@@ -2888,9 +2888,9 @@ final class AnnotateHarness {
             endSession()
             return
         }
-        guard (textButton.toolTip ?? "").hasPrefix("提取文字"), (barcodeButton.toolTip ?? "").hasPrefix("识别码"),
+        guard (textButton.accessibilityLabel() ?? "").hasPrefix("提取文字"), (barcodeButton.accessibilityLabel() ?? "").hasPrefix("识别码"),
               textButton.image != nil, barcodeButton.image != nil else {
-            fail("RECOGNIZE-BUTTONS", "按钮标识不符：\(textButton.toolTip ?? "nil") / \(barcodeButton.toolTip ?? "nil")")
+            fail("RECOGNIZE-BUTTONS", "按钮标识不符：\(textButton.accessibilityLabel() ?? "nil") / \(barcodeButton.accessibilityLabel() ?? "nil")")
             endSession()
             return
         }

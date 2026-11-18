@@ -155,13 +155,13 @@ enum SettingsSection: Int, CaseIterable {
 @MainActor
 final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, NSWindowDelegate {
     struct CredentialAccess {
-        let isSaved: () -> Bool
+        let status: () -> TranslationCredentialStore.Status
         let save: (String) -> Bool
-        let clear: () -> Void
+        let clear: () -> Bool
 
         static var keychain: CredentialAccess {
             let store = TranslationCredentialStore()
-            return CredentialAccess(isSaved: { store.load() != nil }, save: { store.save($0) }, clear: { _ = store.delete() })
+            return CredentialAccess(status: store.status, save: store.save, clear: store.delete)
         }
     }
 
@@ -176,6 +176,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     private(set) var statusLabels: [HotkeyAction: NSTextField] = [:]
     let directoryLabel = NSTextField(labelWithString: "")
     let chooseDirectoryButton = AppActionButton(title: "选择文件夹", emphasis: .secondary, target: nil, action: nil)
+    private let restoreCapacityTitle = "贴图恢复上限"
     let restoreCapacityField = AppTextField()
     private(set) var restoreCapacityInput: AppNumberInput!
     private(set) var dwellInput: AppNumberInput!
@@ -239,6 +240,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     }
 
     func show() {
+        if selectedSection == .translation { refreshCredentialStatus() }
         window?.level = .normal
         showWindow(nil)
         window?.center()
@@ -281,6 +283,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         let container = AppSurfaceView(role: .background, cornerRadius: 0, bordered: false)
         window?.contentView = container
         pin(content, inside: container, inset: 20)
+        window?.initialFirstResponder = sectionControl
         for item in [header, surface, footer] {
             item.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         }
@@ -294,7 +297,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         chooseDirectoryButton.action = #selector(chooseDirectory)
         resetButton.target = self
         resetButton.action = #selector(resetToDefaults)
-        configure(restoreCapacityField, action: #selector(restoreCapacityCommitted), label: "可恢复贴图数量")
+        configure(restoreCapacityField, action: #selector(restoreCapacityCommitted), label: restoreCapacityTitle)
         configure(dwellField, action: #selector(dwellCommitted), label: "触发角停留时间")
         for (field, range) in [(restoreCapacityField, Settings.restoreCapacityRange), (dwellField, HotCornerSettings.dwellRange)] {
             let formatter = NumberFormatter()
@@ -303,7 +306,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             formatter.maximum = NSNumber(value: range.upperBound)
             field.formatter = formatter
         }
-        restoreCapacityInput = AppNumberInput(field: restoreCapacityField, range: Settings.restoreCapacityRange, label: "可恢复贴图数量")
+        restoreCapacityInput = AppNumberInput(field: restoreCapacityField, range: Settings.restoreCapacityRange, label: restoreCapacityTitle)
         dwellInput = AppNumberInput(field: dwellField, range: HotCornerSettings.dwellRange, step: 100, label: "触发角停留时间")
         for (button, action) in [(autoSelectCheckbox, #selector(autoSelectToggled)),
             (detectElementsCheckbox, #selector(detectElementsToggled)), (shadowCheckbox, #selector(shadowToggled)),
@@ -356,7 +359,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             settingRow("检测界面元素", detail: "辅助定位按钮、输入框等界面区域", control: detectElementsCheckbox),
             settingRow("默认选区比例", control: aspectRatioPopup),
             heading("贴图"),
-            settingRow("可恢复贴图数量", detail: "关闭后可找回最近的贴图", control: row([restoreCapacityInput, label("张", secondary: true)])),
+            settingRow(restoreCapacityTitle,
+                detail: "应用运行期间保留最近关闭的贴图。剪贴板仍是上次贴图的内容时，再按贴图快捷键恢复。",
+                control: row([restoreCapacityInput, label("张", secondary: true)])),
             heading("白板"),
             settingRow("白板模式", detail: "用纯色或透明背景开始截图", control: whiteboardCheckbox),
             settingRow("透明背景", control: whiteboardTransparentCheckbox),
@@ -524,6 +529,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         scrollView.needsLayout = true
         scrollView.layoutSubtreeIfNeeded()
         scrollView.contentView.scroll(to: .zero)
+        if section == .translation { refreshCredentialStatus() }
         updateFooterHint()
     }
 
@@ -596,15 +602,21 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         )
         translationEndpointField.stringValue = settings.translationEndpoint
         deepSeekModelField.stringValue = settings.deepSeekModel
-        // Key 只进不出：刷新时检查存在性，不把明文回填到界面。
-        let hasKey = credentials.isSaved()
-        translationKeyStatus.stringValue = hasKey ? "已保存到钥匙串" : "尚未保存密钥"
-        translationKeyStatus.textColor = AppPalette.color(.secondaryText)
-        clearKeyButton.isEnabled = hasKey
         saveKeyButton.isEnabled = !deepSeekKeyField.stringValue.trimmingCharacters(in: .whitespaces).isEmpty
         updateTranslationHint()
         updateHotCornerControls()
         showRegistrationFailures([])
+    }
+
+    private func refreshCredentialStatus() {
+        let status = credentials.status()
+        switch status {
+        case .saved: translationKeyStatus.stringValue = "已保存到钥匙串"
+        case .missing: translationKeyStatus.stringValue = "尚未保存密钥"
+        case .unavailable: translationKeyStatus.stringValue = "暂时无法确认钥匙串状态"
+        }
+        translationKeyStatus.textColor = AppPalette.color(.secondaryText)
+        clearKeyButton.isEnabled = status != .missing
     }
 
     private func updateDirectoryLabel() {
@@ -748,7 +760,6 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         guard credentials.save(typed) else {
             translationKeyStatus.stringValue = "保存失败"
             translationKeyStatus.textColor = AppPalette.color(.error)
-            clearKeyButton.isEnabled = credentials.isSaved()
             return
         }
         // 不把明文回显在界面上，保存成功立即清空输入框。
@@ -760,12 +771,13 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     }
 
     @objc private func clearDeepSeekKey() {
-        credentials.clear()
+        guard credentials.clear() else {
+            translationKeyStatus.stringValue = "未能移除，请重试"
+            translationKeyStatus.textColor = AppPalette.color(.error)
+            return
+        }
         deepSeekKeyField.stringValue = ""
-        let saved = credentials.isSaved()
-        translationKeyStatus.stringValue = saved ? "未能移除，请重试" : "尚未保存密钥"
-        translationKeyStatus.textColor = AppPalette.color(saved ? .error : .secondaryText)
-        clearKeyButton.isEnabled = saved
+        refreshCredentialStatus()
         saveKeyButton.isEnabled = false
     }
 

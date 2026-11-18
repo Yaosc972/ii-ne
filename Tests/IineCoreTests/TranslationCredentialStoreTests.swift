@@ -3,6 +3,21 @@ import Testing
 @testable import IineCore
 
 struct TranslationCredentialStoreTests {
+    @Test func statusFindsLegacyCredentialWithoutReadingOrMigratingIt() {
+        let keychain = MemoryKeychain()
+        #expect(keychain.store.status() == .missing)
+        keychain.values[LegacyBrandMigration.credentialService] = "old-key"
+        #expect(keychain.store.status() == .saved)
+        #expect(keychain.reads.isEmpty)
+        #expect(keychain.writes.isEmpty)
+    }
+
+    @Test func statusDistinguishesUnavailableFromMissing() {
+        let keychain = MemoryKeychain()
+        keychain.unavailableServices.insert(TranslationCredentialStore.service)
+        #expect(keychain.store.status() == .unavailable)
+    }
+
     @Test func newCredentialTakesPrecedenceWithoutReadingLegacy() {
         let keychain = MemoryKeychain()
         keychain.values = [TranslationCredentialStore.service: "current-key", LegacyBrandMigration.credentialService: "old-key"]
@@ -84,6 +99,10 @@ private final class MemoryKeychain {
 
     var store: TranslationCredentialStore {
         TranslationCredentialStore(keychain: .init(
+            status: { service in
+                if self.unavailableServices.contains(service) { return .unavailable }
+                return self.values[service] == nil ? .missing : .saved
+            },
             read: { service in
                 self.reads.append(service)
                 if self.unavailableServices.contains(service) { return .unavailable }

@@ -180,7 +180,7 @@ final class PinToolbar: NSView {
         button.imageScaling = .scaleNone
         button.imagePosition = .imageOnly
         button.contentTintColor = AppPalette.color(.text)
-        button.toolTip = title
+        button.hoverTitle = title
         button.setAccessibilityLabel(title)
         button.target = target
         button.action = action
