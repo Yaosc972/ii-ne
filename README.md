@@ -12,7 +12,7 @@
 [![Tests](https://img.shields.io/badge/tests-352%20unit%20%2B%205%20E2E-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[中文](#中文) · [English](#english)
+[产品主页](https://yaosc972.github.io/ii-ne/) · [中文](#中文) · [English](#english)
 
 </div>
 

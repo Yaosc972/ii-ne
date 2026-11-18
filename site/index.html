@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ii ne · 把画面贴在手边</title>
+  <meta name="description" content="ii ne 是一款开源的 macOS 截图与贴图工具，支持滚动长截图、标注、文字提取、翻译和润色。">
+  <meta name="theme-color" content="#faf9f5">
+  <link rel="icon" href="media/paw.webp"><link rel="stylesheet" href="style.css">
+  <script src="demo.js" defer></script>
+</head>
+<body>
+<header class="shell nav">
+  <a class="brand" href="#top" aria-label="ii ne 首页"><img src="media/paw.webp" width="46" height="46" alt="">ii ne</a>
+  <nav aria-label="主导航"><a href="#features">功能</a><a href="#install">安装</a><a class="repo" href="https://github.com/Yaosc972/ii-ne">GitHub ↗</a></nav>
+</header>
+<main id="top">
+  <section class="shell hero" aria-labelledby="headline">
+    <div class="intro">
+      <p class="platform"><span aria-hidden="true"></span> macOS 原生截图工具</p>
+      <h1 id="headline">截下画面，<br>贴在手边<span>。</span></h1>
+      <p class="lead">用 ii ne 框住屏幕上的一小块，把它贴在桌面上对照。画个箭头、提取文字，或一直往下截成长图。</p>
+      <div class="actions"><a class="primary" href="#install">在 Mac 上安装 <span aria-hidden="true">↓</span></a><a class="code-link" href="https://github.com/Yaosc972/ii-ne">查看源代码 ↗</a></div>
+      <p class="spec">macOS 12 及以上 <b>·</b> MIT 开源</p>
+    </div>
+    <figure class="demo" data-mode="capture">
+      <div class="art">
+        <img class="wave" src="media/wave.webp" width="1200" height="823" alt="葛饰北斋的浮世绘《神奈川冲浪里》，白色浪尖下有三艘小船">
+        <div class="crop" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="tools" aria-hidden="true"><img src="media/toolbar.webp" alt=""></div>
+        <div class="pin-example" aria-hidden="true"><img src="media/wave.webp" alt=""><span>置顶贴图</span></div>
+        <div class="ocr-example" aria-hidden="true"><small>提取文字</small><strong lang="ja">神奈川沖浪裏</strong></div>
+      </div>
+      <figcaption>
+        <div class="modes" role="group" aria-label="选择功能演示">
+          <button type="button" data-mode="capture" aria-pressed="true">截图标注</button>
+          <button type="button" data-mode="pin" aria-pressed="false">置顶贴图</button>
+          <button type="button" data-mode="ocr" aria-pressed="false">提取文字</button>
+        </div>
+        <p id="demo-description" aria-live="polite">框选画面，在选区旁直接标注。</p>
+      </figcaption>
+    </figure>
+  </section>
+  <section id="features" class="features"><div class="shell">
+    <h2>从截图，到用上它。</h2>
+    <div class="feature-list">
+      <article><div class="symbol capture-symbol" aria-hidden="true"></div><h3>把重点圈出来</h3><p>箭头指出问题，马赛克遮住隐私。遇到长页面，滚动截图会逐段拼接，完成后还能继续标注。</p><div class="keyline"><kbd>⌘</kbd><kbd>S</kbd> 保存选区</div></article>
+      <article><div class="symbol pin-symbol" aria-hidden="true"></div><h3>留一份在桌面</h3><p>把剪贴板里的图或文字贴在其他窗口上方。边写边对照，用完拖到屏幕边缘，随时拉回来。</p><div class="keyline"><kbd>F3</kbd> 贴到屏幕</div></article>
+      <article><div class="symbol text-symbol" aria-hidden="true">Aa</div><h3>把图里的字拿出来</h3><p>在本机识别截图里的文字，复制后接着用。需要换种表达时，也能在同一个工作台翻译、润色。</p><div class="keyline">润色需配置 AI 服务密钥</div></article>
+    </div>
+  </div></section>
+  <section id="install" class="shell install">
+    <div><h2>在你的 Mac 上试试。</h2><p>安装 Xcode Command Line Tools 后，在终端运行以下命令。首次截图时，按系统提示开启屏幕录制权限。</p>
+      <a class="code-link" href="https://github.com/Yaosc972/ii-ne#安装">完整安装说明 ↗</a></div>
+    <div class="terminal"><div class="terminal-head"><span>终端</span><button id="copy" type="button">复制命令</button></div><pre><code id="commands">git clone https://github.com/Yaosc972/ii-ne.git
+cd ii-ne
+./build.sh install</code></pre><span class="sr" id="copy-status" role="status"></span></div>
+  </section>
+</main>
+<footer class="shell"><a class="brand" href="#top"><img src="media/paw.webp" width="36" height="36" alt="">ii ne</a><a href="https://www.artic.edu/artworks/24645">演示用画作 · 芝加哥艺术博物馆 ↗</a><a href="https://github.com/Yaosc972/ii-ne">GitHub ↗</a></footer>
+</body>
+</html>
