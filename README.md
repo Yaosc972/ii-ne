@@ -77,7 +77,7 @@ ii ne 是一个用 Swift + AppKit 写的原生 macOS 截图工具，**没有任�
 没有预编译的 release，需要自行构建。只需要 Command Line Tools，**不需要完整 Xcode**：
 
 ```bash
-git clone https://github.com/Yaosc972/yaosnap.git ii-ne
+git clone https://github.com/Yaosc972/ii-ne.git
 cd ii-ne
 ./build.sh install          # 构建并安装到 /Applications 后启动
 ```
@@ -254,7 +254,7 @@ There is no prebuilt release; build it yourself. Command Line Tools are enough, 
 required**:
 
 ```bash
-git clone https://github.com/Yaosc972/yaosnap.git ii-ne
+git clone https://github.com/Yaosc972/ii-ne.git
 cd ii-ne
 ./build.sh install          # build, install into /Applications and launch
 ```
